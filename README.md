@@ -1,184 +1,178 @@
 # Lanework — The Agentic Operating System for Logistics
 
-Lanework is a full-stack AI-powered logistics platform that orchestrates a team of autonomous AI agents to manage your entire logistics operation.
+A full-stack AI-powered logistics platform with **Next.js 16 frontend** + **6 Python AI agents** + **Neon PostgreSQL** + **Cloudflare Workers AI**.
 
-Built with **Next.js 16**, **Neon PostgreSQL**, **NextAuth.js**, and **Cloudflare Workers AI**.
+## Architecture
+
+```
+lanework-next/
+├── src/                          # Next.js 16 frontend (App Router)
+│   ├── app/
+│   │   ├── (auth)/               # Login & Register pages
+│   │   ├── (dashboard)/          # 8 protected dashboard pages
+│   │   ├── api/                  # 18 REST API endpoints
+│   │   ├── page.tsx              # Landing page (Pentagram design)
+│   │   └── globals.css           # Design system
+│   ├── components/ui/            # Reusable UI (Card, Button, Input, etc.)
+│   └── lib/                      # DB, Auth, AI, Utils
+│
+├── backend/                      # Python agent system (from logi repo)
+│   ├── agents/                   # 6 AI agents (FastAPI)
+│   │   ├── shipment-tracking/    # §1 Carrier tracking + ETA drift
+│   │   ├── inventory-management/# §2 Stock monitoring + reorder
+│   │   ├── route-optimization/   # §3 Dynamic routing
+│   │   ├── warehouse-ops/        # §4 Pick/pack/ship + dock scheduling
+│   │   ├── fleet-management/     # §5 HOS compliance + maintenance
+│   │   └── customer-support/     # §6 Auto-replies + sentiment
+│   │
+│   ├── apps/                     # Supporting services
+│   │   ├── orchestrator/         # LangGraph orchestration
+│   │   ├── api-gateway/          # Auth + tenant routing
+│   │   ├── chat-copilot/         # Conversation router
+│   │   ├── voice-gateway/        # LiveKit voice agent
+│   │   └── dashboard/            # React+Vite dashboard (alt)
+│   │
+│   └── packages/                 # Shared libraries
+│       ├── db/                   # SQLAlchemy models
+│       ├── shared-types/         # Pydantic schemas
+│       └── tool-bus/             # MCP client + tool definitions
+│
+├── .env.example                  # Environment template
+├── README.md
+└── package.json
+```
 
 ## Features
 
-### Six AI Agents
-- **Shipment Tracking** — Live tracking across carriers with proactive delay alerts
-- **Inventory Management** — Real-time stock monitoring with reorder alerts
-- **Route Optimization** — Dynamic routing adapting to traffic, weather, and new orders
-- **Warehouse Operations** — Pick paths, task assignment, and dock scheduling
-- **Fleet & Driver Management** — HOS compliance and maintenance tracking
-- **Customer Communication** — Automated responses to status queries
+### Frontend (Next.js 16)
+- **Landing Page** — Pentagram monochrome design, 12 sections (Hero, Problem, Solution, Agents, Pricing, FAQ, etc.)
+- **Dashboard** — Stats cards, agent activity feed, quick actions
+- **8 protected pages** — Shipment, Inventory, Routes, Warehouse, Fleet, Customer, Agents, Dashboard
+- **Auth** — Register/Login with NextAuth.js v5 + Neon DB
+- **Cloudflare AI** — 4 AI functions (shipment analysis, route optimization, sentiment, reasoning)
 
-### Core Capabilities
-- Authentication with Neon PostgreSQL (email/password via NextAuth.js)
-- Cloudflare Workers AI integration for intelligent reasoning
-- Full audit trail on every autonomous action
-- Configurable trust levels per agent
-- Tenant-isolated data architecture
-- REST API for all agents
+### Backend (Python / FastAPI)
+- **6 AI Agents** (30 files, ~430KB) — each with:`__init__.py`, `config.py`, `schemas.py`, `service.py`, `main.py`
+- **Trust Level System** — Propose-only / Auto-execute / Fully-autonomous per action
+- **AgentTask Audit** — Every action creates a reasoned audit trail
+- **MCP Tool Bus** — Cross-agent & 3rd-party API integration
+- **Webhook System** — 37 event types across all agents
+- **Tenant Isolation** — Row-level security in PostgreSQL
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Next.js 16 (App Router) |
-| Language | TypeScript |
-| Database | Neon PostgreSQL (Serverless) |
+| Frontend | Next.js 16, React 19, Tailwind CSS v4 |
+| Backend | Python 3.11+, FastAPI, SQLAlchemy, LangGraph |
 | Auth | NextAuth.js v5 (Credentials) |
+| Database | Neon PostgreSQL (Serverless) |
 | AI | Cloudflare Workers AI (Llama 3 8B) |
-| Styling | Tailwind CSS v4 |
-| Forms | react-hook-form + zod |
+| Agent Tooling | MCP (Model Context Protocol) |
+| Voice | LiveKit Agents |
 | Charts | Recharts |
-| UI | Custom Pentagram-inspired design system |
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js 18+
-- npm 9+
-- A [Neon](https://neon.tech) PostgreSQL database
-- A [Cloudflare](https://workers.ai) account with Workers AI access
+- Python 3.11+
+- Neon PostgreSQL database
+- Cloudflare Workers AI account
 
-### Setup
+### Frontend Setup
 
-1. **Clone the repository**
 ```bash
-git clone https://github.com/tanditanay3-lab/lanework-next.git
 cd lanework-next
-```
-
-2. **Install dependencies**
-```bash
 npm install
-```
-
-3. **Configure environment variables**
-```bash
 cp .env.example .env.local
-```
-
-Edit `.env.local` with your credentials:
-```env
-DATABASE_URL="postgresql://..."
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-secret-here"
-CLOUDFLARE_AI_ACCOUNT_ID="your-account-id"
-CLOUDFLARE_AI_API_KEY="your-api-key"
-```
-
-4. **Initialize the database**
-```bash
-npm run db:init
-```
-
-5. **Start development server**
-```bash
+# Edit .env.local with your credentials
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Project Structure
+### Backend Setup
 
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+
+# Run an individual agent
+cd agents/shipment-tracking
+python main.py  # Starts on port 8000
+
+# Or use docker-compose
+cd backend
+docker-compose up
 ```
-lanework-next/
-├── src/
-│   ├── app/
-│   │   ├── (auth)/              # Login & Register pages
-│   │   ├── (dashboard)/         # Protected dashboard pages
-│   │   │   ├── dashboard/       # Main overview
-│   │   │   ├── agents/          # Agent management
-│   │   │   ├── shipment/        # Shipment tracking
-│   │   │   ├── inventory/       # Inventory management
-│   │   │   ├── routes/          # Route optimization
-│   │   │   ├── warehouse/       # Warehouse operations
-│   │   │   ├── fleet/           # Fleet & driver management
-│   │   │   └── customer/        # Customer communications
-│   │   ├── api/                 # REST API routes
-│   │   │   ├── auth/            # Authentication endpoints
-│   │   │   ├── ai/              # Cloudflare AI integration
-│   │   │   ├── shipment/        # Shipment CRUD
-│   │   │   ├── inventory/       # Inventory CRUD
-│   │   │   ├── routes/          # Routes CRUD
-│   │   │   ├── warehouse/       # Warehouse CRUD
-│   │   │   ├── fleet/           # Fleet CRUD
-│   │   │   ├── customer/        # Customer CRUD
-│   │   │   └── dashboard/       # Dashboard stats
-│   │   ├── globals.css          # Global styles + Pentagram design system
-│   │   ├── layout.tsx           # Root layout with providers
-│   │   └── page.tsx             # Landing page
-│   ├── components/
-│   │   ├── ui/                  # Reusable UI components
-│   │   ├── providers.tsx        # Session + Query + Toast providers
-│   │   ├── agents/              # Agent-specific components
-│   │   ├── dashboard/           # Dashboard components
-│   │   └── auth/                # Auth components
-│   └── lib/
-│       ├── db.ts                # Database schema (Drizzle ORM)
-│       ├── db-init.ts           # Database initialization
-│       ├── auth.ts              # NextAuth configuration
-│       ├── ai.ts                # Cloudflare Workers AI client
-│       └── utils.ts             # Utility functions
-├── .env.example                 # Environment template
-├── package.json
-├── tsconfig.json
-├── next.config.ts
-└── README.md
+
+### Database Setup
+
+```bash
+# Initialize all tables
+npm run db:init
+
+# Or directly via Python
+cd backend
+python -c "from packages.db.models import *; # creates tables"
 ```
 
 ## API Endpoints
 
-All endpoints are prefixed with `/api/`:
+### Frontend API (Next.js)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/register` | Register new user |
-| GET/POST | `/api/auth/[...nextauth]` | NextAuth handler |
-| POST | `/api/ai` | Cloudflare AI inference |
-| GET/POST | `/api/shipment` | List/Create shipments |
-| GET/PATCH/DELETE | `/api/shipment/[id]` | Manage shipment |
-| GET/POST | `/api/inventory` | List/Create inventory |
-| GET/POST | `/api/routes` | List/Create routes |
-| GET/POST | `/api/warehouse` | List/Create warehouse tasks |
-| GET/POST | `/api/fleet/drivers` | List/Create drivers |
-| GET/POST | `/api/fleet/vehicles` | List/Create vehicles |
-| GET/POST | `/api/customer` | List/Create conversations |
-| GET | `/api/dashboard/stats` | Dashboard statistics |
+| POST | `/api/auth/register` | Register user |
+| ALL | `/api/auth/[...nextauth]` | NextAuth handler |
+| POST | `/api/ai` | Cloudflare AI |
+| CRUD | `/api/shipment` | Shipment management |
+| CRUD | `/api/inventory` | Inventory management |
+| CRUD | `/api/routes` | Route management |
+| CRUD | `/api/warehouse` | Warehouse tasks |
+| CRUD | `/api/fleet/drivers` | Driver management |
+| CRUD | `/api/fleet/vehicles` | Vehicle management |
+| CRUD | `/api/customer` | Conversations |
+| GET | `/api/dashboard/stats` | Dashboard stats |
 
-## Build & Lint
+### Backend API (Python) — see [agent-api-specifications.md](backend/agent-api-specifications.md)
 
-```bash
-# Build for production
-npm run build
+| Agent | Port | Key Operations |
+|-------|------|----------------|
+| shipment-tracking | 8000 | Create, track, webhook, ETA drift |
+| inventory-management | 8001 | CRUD, transfer, adjust, recommend |
+| route-optimization | 8002 | Create, optimize, assign, re-optimize |
+| warehouse-ops | 8004 | Tasks, dock schedule, labor forecast |
+| fleet-management | 8005 | Drivers, vehicles, HOS, maintenance |
+| customer-support | 8006 | Conversations, replies, escalations, sentiment |
 
-# Run linter
-npm run lint
+## Database Schema
 
-# Start production server
-npm start
-```
+The database has 11 tables in Neon PostgreSQL:
+
+| Table | Purpose |
+|-------|---------|
+| `users` | Auth accounts |
+| `sessions` | Session tokens |
+| `agent_tasks` | Audit trail for all agent actions |
+| `shipments` | Tracking + carrier data |
+| `inventory` | Stock levels + reorder points |
+| `routes` | Route plans + optimizations |
+| `warehouse_tasks` | Pick/pack/ship/receive |
+| `drivers` | Driver profiles + HOS |
+| `vehicles` | Vehicle fleet + maintenance |
+| `conversations` | Customer interactions |
+| `messages` | Chat messages |
 
 ## Rollback Strategy
 
-The repository uses Git tags for versioned releases:
-
-```bash
-# Create a release tag before major changes
-git tag v1.0.0
-git push origin v1.0.0
-
-# To rollback to a previous version
-git checkout v0.9.0
-# Or revert specific commits
-git revert <commit-hash>
-```
-
-Each major feature merge creates an incremental commit making it easy to isolate and revert.
+- Git tags created before major changes: `git tag v1.0.0`
+- Incremental commits per module make isolation easy
+- To rollback: `git checkout v0.9.0` or `git revert <commit-hash>`
+- Database schema is additive (no destructive migrations)
 
 ## License
 
