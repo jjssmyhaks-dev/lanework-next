@@ -8,21 +8,20 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-}).refine((data) => {
-  return data.password.length >= 6;
-}, { message: "Password must be at least 6 characters", path: ["password"] });
+  password: z.string().min(3, "Password must be at least 3 characters"),
+});
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<RegisterForm>({ resolver: zodResolver(registerSchema) });
 
@@ -98,9 +97,15 @@ export default function RegisterPage() {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-[#1a1a2e] mb-1.5">Password</label>
-              <input id="password" type="password" {...register("password")}
-                className="w-full rounded-lg border border-[#d1d5db] px-4 py-3 text-[#1a1a2e] placeholder:text-[#9ca3af] focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] transition"
-                placeholder="Min 6 characters" />
+              <div className="relative">
+                <input id="password" type={showPassword ? "text" : "password"} {...register("password")}
+                  className="w-full rounded-lg border border-[#d1d5db] px-4 py-3 pr-12 text-[#1a1a2e] placeholder:text-[#9ca3af] focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] transition"
+                  placeholder="Min 3 characters" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#1a1a2e] transition">
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
               {errors.password && <p className="mt-1 text-sm text-red-500">{errors.password.message}</p>}
             </div>
 
@@ -111,7 +116,8 @@ export default function RegisterPage() {
           </form>
 
           <p className="text-center text-sm text-[#6b7280]">
-            Already have an account? <Link href="/login" className="font-medium text-[#1a1a2e] hover:underline underline-offset-4">Sign in</Link>
+            Already have an account?{" "}
+            <Link href="/login" className="font-medium text-[#1a1a2e] hover:underline underline-offset-4">Sign in</Link>
           </p>
         </div>
       </div>

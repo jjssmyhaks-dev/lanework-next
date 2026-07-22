@@ -8,6 +8,7 @@ export async function initDatabase() {
         id TEXT PRIMARY KEY,
         name TEXT,
         email TEXT NOT NULL UNIQUE,
+        password_hash TEXT,
         email_verified TIMESTAMP,
         image TEXT,
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
