@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const userId = searchParams.get("userId") || "default";
 
     const customers = await sql`
-      SELECT * FROM customers WHERE user_id = ${userId} ORDER BY created_at DESC
+      SELECT * FROM customers ORDER BY created_at DESC
     `;
 
     return NextResponse.json(customers);
@@ -35,8 +35,8 @@ export async function POST(request: Request) {
     const user_id = userId || "default";
 
     await sql`
-      INSERT INTO customers (id, user_id, customer_name, channel, status)
-      VALUES (${id}, ${user_id}, ${customerName}, ${channel || null}, ${status || "active"})
+      INSERT INTO customers (id, customer_name, channel, status)
+      VALUES (${id}, ${customerName}, ${channel || null}, ${status || "active"})
     `;
 
     const [customer] = await sql`

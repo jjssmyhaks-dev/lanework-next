@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const userId = searchParams.get("userId") || "default";
 
     const routes = await sql`
-      SELECT * FROM routes WHERE user_id = ${userId} ORDER BY created_at DESC
+      SELECT * FROM routes ORDER BY created_at DESC
     `;
 
     return NextResponse.json(routes);
@@ -35,8 +35,8 @@ export async function POST(request: Request) {
     const user_id = userId || "default";
 
     await sql`
-      INSERT INTO routes (id, user_id, name, origin, destination, stops, distance_km, estimated_minutes, status)
-      VALUES (${id}, ${user_id}, ${name}, ${origin}, ${destination}, ${stops ?? null}, ${distanceKm ?? 0}, ${estimatedMinutes ?? 0}, ${status || "active"})
+      INSERT INTO routes (id, name, origin, destination, stops, distance_km, estimated_minutes, status)
+      VALUES (${id}, ${name}, ${origin}, ${destination}, ${stops ?? null}, ${distanceKm ?? 0}, ${estimatedMinutes ?? 0}, ${status || "active"})
     `;
 
     const [route] = await sql`

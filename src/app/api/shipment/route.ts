@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const userId = searchParams.get("userId") || "default";
 
     const shipments = await sql`
-      SELECT * FROM shipments WHERE user_id = ${userId} ORDER BY created_at DESC
+      SELECT * FROM shipments ORDER BY created_at DESC
     `;
 
     return NextResponse.json(shipments);
@@ -35,8 +35,8 @@ export async function POST(request: Request) {
     const user_id = userId || "default";
 
     await sql`
-      INSERT INTO shipments (id, user_id, tracking_number, carrier, origin, destination, eta)
-      VALUES (${id}, ${user_id}, ${trackingNumber}, ${carrier}, ${origin}, ${destination}, ${eta || null})
+      INSERT INTO shipments (id, tracking_number, carrier, origin, destination, eta)
+      VALUES (${id}, ${trackingNumber}, ${carrier}, ${origin}, ${destination}, ${eta || null})
     `;
 
     const [shipment] = await sql`
