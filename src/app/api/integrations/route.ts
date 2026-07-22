@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const orgId = searchParams.get("orgId") || "default";
     const sql = neon(process.env.DATABASE_URL!);
 
-    const integrations = await sql`SELECT * FROM integrations WHERE org_id = ${orgId} ORDER BY type`;
+    const integrations = await sql`SELECT * FROM integrations ORDER BY type`;
     // Return defaults if empty
     if (!integrations.length) {
       return NextResponse.json({
@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
     const sql = neon(process.env.DATABASE_URL!);
     const id = crypto.randomUUID();
     await sql`
-      INSERT INTO integrations (id, org_id, type, name, status, config, connected_at)
-      VALUES (${id}, ${orgId}, ${type}, ${name}, 'connected', ${JSON.stringify(config || {})}, NOW())
+      INSERT INTO integrations (id, type, name, status, config, connected_at)
+      VALUES (${id}, ${type}, ${name}, 'connected', ${JSON.stringify(config || {})}, NOW())
     `;
     return NextResponse.json({ success: true, id }, { status: 201 });
   } catch (e: any) {

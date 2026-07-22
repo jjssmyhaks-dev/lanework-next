@@ -7,9 +7,11 @@ export async function GET(request: NextRequest) {
     const orgId = searchParams.get("orgId") || "default";
     const sql = neon(process.env.DATABASE_URL!);
 
-    const [tasks]: any[] = await sql`SELECT COUNT(*)::int as count FROM agent_tasks WHERE org_id = ${orgId}`;
-    const [actions]: any[] = await sql`SELECT COUNT(*)::int as count FROM approval_actions WHERE org_id = ${orgId}`;
-    const events = await sql`SELECT * FROM usage_events WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 20`;
+    const tasksResult = await sql`SELECT COUNT(*)::int as count FROM agent_tasks`;
+    const [tasks]: any[] = tasksResult;
+    const actionsResult = await sql`SELECT COUNT(*)::int as count FROM approval_actions`;
+    const [actions]: any[] = actionsResult;
+    const events = await sql`SELECT * FROM usage_events ORDER BY created_at DESC LIMIT 20`;
 
     return NextResponse.json({
       stats: {

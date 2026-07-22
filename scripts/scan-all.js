@@ -9,8 +9,9 @@ const tests = [
   ['GET','/api/integrations?orgId=default'],['GET','/api/agents/trust?orgId=default'],
   ['GET','/api/usage?orgId=default'],['GET','/api/approvals?orgId=default'],
   ['POST','/api/contact','{"name":"Test","email":"t@t.com"}'],
-  ['POST','/api/onboarding','{"step":"create-org","userId":"u1","orgName":"TestOrg"}'],
   ['POST','/api/approvals','{"orgId":"default","agentType":"shipment_tracking","actionType":"reroute","description":"Test"}'],
+  ['POST','/api/onboarding','{"step":"create-org","userId":"u1","orgName":"TestOrg"}'],
+  ['GET','/api/db/init'],
 ];
 let done = 0;
 const results = [];
