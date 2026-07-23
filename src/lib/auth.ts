@@ -1,71 +1,44 @@
-import NextAuth from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
+import { SignJWT, jwtVerify } from "jose";
 
-const sql = neon(process.env.DATABASE_URL!);
+const SECRET = new TextEncoder().encode(process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "lanework-jwt-key-2024");
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  providers: [
-    CredentialsProvider({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error("Email and password are required");
-        }
+export type SessionUser = { id: string; name?: string | null; email?: string | null; image?: string | null };
 
-        const [user] = await sql`
-          SELECT id, name, email, image, password_hash
-          FROM users
-          WHERE email = ${credentials.email as string}
-        `;
+/* ── JWT helpers ── */
+export async function createToken(user: SessionUser): Promise<string> {
+  return new SignJWT({ id: user.id, name: user.name, email: user.email })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(SECRET);
+}
 
-        if (!user) {
-          throw new Error("Invalid email or password");
-        }
+export async function verifyToken(token: string): Promise<SessionUser | null> {
+  try {
+    const { payload } = await jwtVerify(token, SECRET);
+    return payload as unknown as SessionUser;
+  } catch {
+    return null;
+  }
+}
 
-        const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user.password_hash
-        );
+/* ── Get user from request cookie ── */
+export async function getSessionUser(request: Request): Promise<SessionUser | null> {
+  const cookie = request.headers.get("cookie") || "";
+  const match = cookie.match(/auth-token=([^;]+)/);
+  if (!match) return null;
+  return verifyToken(match[1]);
+}
 
-        if (!isValid) {
-          throw new Error("Invalid email or password");
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-        };
-      },
-    }),
-  ],
-  session: {
-    strategy: "jwt",
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token && session.user) {
-        (session.user as { id: string }).id = token.id as string;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-  },
-  secret: process.env.NEXTAUTH_SECRET,
-});
+/* ── Login (used by API route) ── */
+export async function login(email: string, password: string): Promise<{ error?: string; token?: string; user?: SessionUser }> {
+  const sql = neon(process.env.DATABASE_URL!);
+  const [user] = await sql`SELECT * FROM users WHERE email = ${email}`;
+  if (!user) return { error: "Invalid email or password" };
+  const match = await bcrypt.compare(password, user.password_hash);
+  if (!match) return { error: "Invalid email or password" };
+  const sessionUser: SessionUser = { id: user.id, name: user.name, email: user.email, image: user.image };
+  return { token: await createToken(sessionUser), user: sessionUser };
+}

@@ -1,3 +1,9 @@
-import { handlers } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
 
-export const { GET, POST } = handlers;
+// NextAuth deleted — stub route
+export async function GET() {
+  return NextResponse.json({ message: "ok" });
+}
+export async function POST() {
+  return NextResponse.json({ message: "ok" });
+}

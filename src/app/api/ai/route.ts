@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth";
 import { neon } from "@neondatabase/serverless";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -11,14 +11,14 @@ import {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user) {
+    const sessionUser = await getSessionUser(request);
+    if (!sessionUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = await request.json();
     const { action, data } = body;
-    const userId = (session.user as { id: string }).id;
+    const userId = sessionUser.id;
     const sql = neon(process.env.DATABASE_URL!);
 
     let result: string;
