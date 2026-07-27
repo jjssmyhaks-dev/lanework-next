@@ -1,27 +1,9 @@
 {
-  "services": {
-    "frontend": {
-      "root": ".",
-      "framework": "nextjs"
-    },
-    "backend": {
-      "root": "backend"
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "memory": 512,
+      "maxDuration": 60
     }
   },
-  "rewrites": [
-    {
-      "source": "/api/backend(/.*)?",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "frontend"
-      }
-    }
-  ]
+  "ignoreCommand": "! test -d backend || echo 'skip'"
 }
