@@ -16,6 +16,12 @@ export async function GET() {
     await sql`CREATE TABLE IF NOT EXISTS usage_events (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, event_type TEXT NOT NULL, category TEXT, value REAL DEFAULT 1, metadata JSONB, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
     await sql`CREATE TABLE IF NOT EXISTS contact_submissions (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, company TEXT, message TEXT, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
     await sql`CREATE TABLE IF NOT EXISTS integrations (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, type TEXT NOT NULL, name TEXT NOT NULL, status TEXT DEFAULT 'disconnected', config JSONB DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
+    // Fix missing columns from old schema
+    try { await sql`ALTER TABLE integrations ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT 'default'`; } catch {}
+    try { await sql`ALTER TABLE integrations ADD COLUMN IF NOT EXISTS type TEXT`; } catch {}
+    try { await sql`ALTER TABLE integrations ADD COLUMN IF NOT EXISTS config JSONB DEFAULT '{}'`; } catch {}
+    await sql`CREATE TABLE IF NOT EXISTS webhooks (id TEXT PRIMARY KEY, type TEXT NOT NULL, endpoint TEXT NOT NULL, secret TEXT, integration_id TEXT, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
+    await sql`CREATE TABLE IF NOT EXISTS webhook_events (id TEXT PRIMARY KEY, webhook_id TEXT, integration_id TEXT, event_type TEXT NOT NULL, payload JSONB DEFAULT '{}', processed BOOLEAN DEFAULT false, received_at TIMESTAMPTZ DEFAULT NOW() NOT NULL, processed_at TIMESTAMPTZ)`;
 
     // Verify
     try {

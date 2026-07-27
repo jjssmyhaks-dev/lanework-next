@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   LayoutDashboard, Truck, Package, Route, Warehouse, Users, MessageSquare,
-  LogOut, Menu, X, Bot, Shield, BookOpen
+  LogOut, Menu, X, Bot, Shield, BookOpen, Plug
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -21,6 +21,7 @@ const navItems = [
   { href: "/warehouse", label: "Warehouse", icon: Warehouse },
   { href: "/fleet", label: "Fleet", icon: Users },
   { href: "/customer", label: "Customers", icon: BookOpen },
+  { href: "/integrations", label: "Integrations", icon: Plug },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

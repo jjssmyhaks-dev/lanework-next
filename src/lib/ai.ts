@@ -59,6 +59,25 @@ export async function analyzeSentiment(text: string): Promise<string> {
   return runAIModel("@cf/meta/llama-3-8b-instruct", prompt);
 }
 
+// Inventory optimization — predict reorder needs, analyze stock levels
+export async function analyzeInventory(sku: string, currentStock: number, dailyDemand: number, leadTimeDays: number): Promise<string> {
+  const prompt = `As an inventory optimization AI, analyze this stock situation: SKU ${sku}, current stock ${currentStock} units, daily demand ${dailyDemand} units, supplier lead time ${leadTimeDays} days. Should we reorder? What quantity? Provide a concise 2-3 sentence recommendation.`;
+  return runAIModel("@cf/meta/llama-3-8b-instruct", prompt);
+}
+
+// Warehouse operations — task assignment, pick path optimization, dock scheduling
+export async function optimizeWarehouse(taskType: string, context: string): Promise<string> {
+  const prompt = `As a warehouse operations AI, optimize this ${taskType} task: ${context}. Consider priority, location, and resource availability. Provide a concise recommendation in 2-3 sentences.`;
+  return runAIModel("@cf/meta/llama-3-8b-instruct", prompt);
+}
+
+// Fleet management — vehicle maintenance, driver compliance, scheduling
+export async function manageFleet(taskType: string, context: string): Promise<string> {
+  const prompt = `As a fleet management AI, handle this ${taskType} issue: ${context}. Consider safety, compliance, and operational efficiency. Provide a concise recommendation in 2-3 sentences.`;
+  return runAIModel("@cf/meta/llama-3-8b-instruct", prompt);
+}
+
+// Generic task reasoning — used by copilot and eval
 export async function generateTaskReasoning(taskType: string, context: string): Promise<string> {
   const prompt = `As a logistics AI agent, provide reasoning for this ${taskType} task: ${context}. Keep it under 100 words.`;
   return runAIModel("@cf/meta/llama-3-8b-instruct", prompt);

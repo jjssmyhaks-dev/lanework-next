@@ -32,10 +32,18 @@ export default function CopilotPage() {
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: msg }),
+        body: JSON.stringify({
+          action: "reasoning",
+          data: { agentId: "copilot", taskType: "user_query", context: msg }
+        }),
       });
+      if (res.status === 401) {
+        setMessages(prev => [...prev, { role: "assistant", content: "Please sign in to use the copilot." }]);
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
-      setMessages(prev => [...prev, { role: "assistant", content: data.response || data.error || "Sorry, I couldn't process that." }]);
+      setMessages(prev => [...prev, { role: "assistant", content: data.result || data.error || "Sorry, I couldn't process that." }]);
     } catch {
       setMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
     } finally { setLoading(false); }

@@ -1,0 +1,9 @@
+{
+  "regions": ["bom1"],
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "memory": 512,
+      "maxDuration": 60
+    }
+  }
+}

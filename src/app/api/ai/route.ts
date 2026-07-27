@@ -9,6 +9,23 @@ import {
   generateTaskReasoning,
 } from "@/lib/ai";
 
+// GET — return recent agent tasks for dashboard / agents pages
+export async function GET() {
+  try {
+    const sql = neon(process.env.DATABASE_URL!);
+    const tasks = await sql`
+      SELECT id, agent_type as agent, action_type as action, status, reasoning_trace as reasoning, created_at
+      FROM agent_tasks
+      ORDER BY created_at DESC
+      LIMIT 20
+    `;
+    return NextResponse.json(tasks);
+  } catch (error) {
+    console.error("AI GET error:", error);
+    return NextResponse.json([], { status: 200 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const sessionUser = await getSessionUser(request);
@@ -55,8 +72,8 @@ export async function POST(request: NextRequest) {
     // Create AgentTask record
     const taskId = uuidv4();
     await sql`
-      INSERT INTO agent_tasks (id, agent_id, user_id, action, status, reasoning, payload, created_at, updated_at)
-      VALUES (${taskId}, ${agentId}, ${userId}, ${action}, 'completed', ${result}, ${JSON.stringify(data)}::jsonb, NOW(), NOW())
+      INSERT INTO agent_tasks (id, tenant_id, agent_type, action_type, status, reasoning_trace, input_data, created_at, updated_at)
+      VALUES (${taskId}, ${userId}, ${agentId}, ${action}, 'completed', ${result}, ${JSON.stringify(data)}::jsonb, NOW(), NOW())
     `;
 
     return NextResponse.json({
