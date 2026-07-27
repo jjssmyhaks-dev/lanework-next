@@ -1,9 +1,12 @@
 {
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "buildCommand": "npx next build",
+  "outputDirectory": ".next",
   "functions": {
     "src/app/api/**/*.ts": {
       "memory": 512,
       "maxDuration": 60
     }
-  },
-  "ignoreCommand": "! test -d backend || echo 'skip'"
+  }
 }
