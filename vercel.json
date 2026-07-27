@@ -1,9 +1,27 @@
 {
-  "regions": ["bom1"],
-  "functions": {
-    "src/app/api/**/*.ts": {
-      "memory": 512,
-      "maxDuration": 60
+  "services": {
+    "frontend": {
+      "root": ".",
+      "framework": "nextjs"
+    },
+    "backend": {
+      "root": "backend"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/backend(/.*)?",
+      "destination": {
+        "type": "service",
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "type": "service",
+        "service": "frontend"
+      }
+    }
+  ]
 }
