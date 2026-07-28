@@ -37,43 +37,29 @@ export class FedexMCP extends LaneworkMCPServer {
     this.dhlAccount = process.env.DHL_ACCOUNT_NUMBER || this.config.DHL_ACCOUNT_NUMBER || "";
   }
 
+  private fedexConfigured(): boolean {
+    return this.hasEnv("FEDEX_API_KEY") || (!!this.fedexKey && !!this.fedexSecret && !!this.fedexAccount);
+  }
+
   /** ─── FEDEX AUTH ─── */
-  private async fedexAuth(): Promise<string> {
+  private async fedexAuth(): Promise<string | null> {
+    if (!this.fedexConfigured()) return null;
     if (this.fedexToken && Date.now() < this.fedexTokenExpiry) return this.fedexToken;
 
-    const res = await fetch(`${this.fedexBase}/oauth/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `grant_type=client_credentials&client_id=${this.fedexKey}&client_secret=${this.fedexSecret}`,
-    });
-    if (!res.ok) throw new Error(`FedEx auth failed: ${res.status}`);
-    const data: any = await res.json();
-    this.fedexToken = data.access_token;
-    this.fedexTokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
-    return this.fedexToken;
-  }
-
-  private async fedexReq(method: string, path: string, body?: any): Promise<any> {
-    const token = await this.fedexAuth();
-    const res = await fetch(`${this.fedexBase}${path}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+    const authResult = await this.safeApiCall<any>(
+      "FedEx OAuth",
+      `${this.fedexBase}/oauth/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `grant_type=client_credentials&client_id=${this.fedexKey}&client_secret=${this.fedexSecret}`,
       },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) throw new Error(`FedEx API error: ${res.status} ${await res.text()}`);
-    return res.json();
-  }
+    );
 
-  /** ─── DHL REQ ─── */
-  private async dhlReq(trackingNumber: string): Promise<any> {
-    const res = await fetch(`${this.dhlBase}?trackingNumber=***}`, {
-      headers: { "DHL-API-Key": this.dhlKey, "Accept": "application/json" },
-    });
-    if (!res.ok) throw new Error(`DHL API error: ${res.status}`);
-    return res.json();
+    if (!authResult.ok || !authResult.data?.access_token) return null;
+    this.fedexToken = authResult.data.access_token;
+    this.fedexTokenExpiry = Date.now() + (authResult.data.expires_in || 3600) * 1000;
+    return this.fedexToken;
   }
 
   /** ─── TOOLS ─── */
@@ -82,35 +68,80 @@ export class FedexMCP extends LaneworkMCPServer {
     trackingNumber: string; carrier: string; status: string;
     origin: string; destination: string; estimatedDelivery: string;
     events: Array<{ date: string; location: string; description: string }>;
+    mode: "live" | "db-fallback";
   }> {
     await this.logAction("track_fedex", "started", { trackingNumber });
 
-    const data = await this.fedexReq("POST", "/track/v1/trackingnumbers", {
-      includeDetailedScans: true,
-      trackingInfo: [{ trackingNumberInfo: { trackingNumber } }],
-    });
+    const token = await this.fedexAuth();
 
-    const result = data.output?.completeTrackResults?.[0]?.trackResults?.[0] || {};
-    const scanEvents = result.scanEvents || [];
+    if (token) {
+      const result = await this.safeApiCall<any>(
+        "FedEx Track",
+        `${this.fedexBase}/track/v1/trackingnumbers`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            includeDetailedScans: true,
+            trackingInfo: [{ trackingNumberInfo: { trackingNumber } }],
+          }),
+        },
+      );
 
-    // Save to DB
-    await this.createShipment({
-      trackingNumber, carrier: "FedEx", origin: "", destination: "",
-      status: result.latestStatusDetail?.code || "unknown",
-    });
+      if (result.ok && result.data) {
+        const trackResult = result.data.output?.completeTrackResults?.[0]?.trackResults?.[0] || {};
+        const scanEvents = trackResult.scanEvents || [];
 
-    await this.logAction("track_fedex", "completed", { trackingNumber });
+        await this.createShipment({
+          trackingNumber, carrier: "FedEx", origin: "", destination: "",
+          status: trackResult.latestStatusDetail?.code || "unknown",
+        });
+
+        await this.logAction("track_fedex", "completed", { trackingNumber });
+        return {
+          trackingNumber, carrier: "FedEx",
+          status: trackResult.latestStatusDetail?.description || "unknown",
+          origin: `${scanEvents[scanEvents.length - 1]?.scanLocation?.city || ""}`,
+          destination: `${scanEvents[0]?.scanLocation?.city || ""}`,
+          estimatedDelivery: trackResult.estimatedDeliveryTimeWindow?.window?.ends || "",
+          events: scanEvents.map((e: any) => ({
+            date: e.date || "",
+            location: `${e.scanLocation?.city || ""}, ${e.scanLocation?.stateOrProvinceCode || ""}`,
+            description: e.eventDescription || e.derivedStatus || "",
+          })),
+          mode: "live",
+        };
+      }
+      // API call failed — fall through to DB fallback
+    }
+
+    // DB fallback: lookup from shipments table
+    const shipmentRows = await this.sql`SELECT * FROM shipments WHERE tracking_number = ${trackingNumber} AND carrier = 'FedEx' ORDER BY created_at DESC LIMIT 1`;
+    const shipment = shipmentRows[0] as any;
+
+    await this.logAction("track_fedex", "completed", { trackingNumber, source: "db-fallback" });
+
+    if (shipment) {
+      return {
+        trackingNumber, carrier: "FedEx",
+        status: shipment.status || "unknown",
+        origin: shipment.origin || "",
+        destination: shipment.destination || "",
+        estimatedDelivery: "",
+        events: [{ date: shipment.created_at || "", location: "", description: shipment.status || "last known status from DB" }],
+        mode: "db-fallback",
+      };
+    }
+
     return {
       trackingNumber, carrier: "FedEx",
-      status: result.latestStatusDetail?.description || "unknown",
-      origin: `${scanEvents[scanEvents.length - 1]?.scanLocation?.city || ""}`,
-      destination: `${scanEvents[0]?.scanLocation?.city || ""}`,
-      estimatedDelivery: result.estimatedDeliveryTimeWindow?.window?.ends || "",
-      events: scanEvents.map((e: any) => ({
-        date: e.date || "",
-        location: `${e.scanLocation?.city || ""}, ${e.scanLocation?.stateOrProvinceCode || ""}`,
-        description: e.eventDescription || e.derivedStatus || "",
-      })),
+      status: "not_found",
+      origin: "", destination: "", estimatedDelivery: "",
+      events: [],
+      mode: "db-fallback",
     };
   }
 
@@ -119,8 +150,25 @@ export class FedexMCP extends LaneworkMCPServer {
     toName: string; toPhone: string; toAddress: string; toCity: string; toPincode: string; toCountry: string;
     weightKg: number;
     declaredValue?: number;
-  }): Promise<{ trackingNumber: string; labelUrl: string; charges: number }> {
+  }): Promise<{
+    trackingNumber?: string; labelUrl?: string; charges?: number;
+    message: string; mode: "live" | "simulated";
+  }> {
     await this.logAction("create_fedex_shipment", "started", params);
+
+    if (!this.fedexConfigured()) {
+      await this.logAction("create_fedex_shipment", "failed", { reason: "FEDEX_API_KEY missing" });
+      return {
+        message: "Requires FEDEX_API_KEY, FEDEX_SECRET_KEY, and FEDEX_ACCOUNT_NUMBER environment variables to create shipments.",
+        mode: "simulated",
+      };
+    }
+
+    const token = await this.fedexAuth();
+    if (!token) {
+      await this.logAction("create_fedex_shipment", "failed", { reason: "FedEx auth failed" });
+      return { message: "FedEx authentication failed — check API credentials.", mode: "simulated" };
+    }
 
     const body = {
       requestedShipment: {
@@ -158,54 +206,111 @@ export class FedexMCP extends LaneworkMCPServer {
       accountNumber: { value: this.fedexAccount },
     };
 
-    const data = await this.fedexReq("POST", "/ship/v1/shipments", body);
-    const result = data.output?.transactionShipments?.[0] || {};
+    const result = await this.safeApiCall<any>(
+      "FedEx Create Shipment",
+      `${this.fedexBase}/ship/v1/shipments`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      },
+    );
 
-    const trackingNumber = result.masterTrackingNumber || result.pieceResponses?.[0]?.trackingNumber || crypto.randomUUID().slice(0, 12);
+    if (result.ok && result.data) {
+      const shipResult = result.data.output?.transactionShipments?.[0] || {};
+      const trackingNumber = shipResult.masterTrackingNumber || shipResult.pieceResponses?.[0]?.trackingNumber || crypto.randomUUID().slice(0, 12);
 
-    await this.createShipment({
-      trackingNumber, carrier: "FedEx", origin: `${params.fromCity}, ${params.fromCountry}`,
-      destination: `${params.toCity}, ${params.toCountry}`,
-      customerName: params.toName, customerPhone: params.toPhone, status: "created",
-    });
+      await this.createShipment({
+        trackingNumber, carrier: "FedEx", origin: `${params.fromCity}, ${params.fromCountry}`,
+        destination: `${params.toCity}, ${params.toCountry}`,
+        customerName: params.toName, customerPhone: params.toPhone, status: "created",
+      });
 
-    await this.logAction("create_fedex_shipment", "completed", { trackingNumber });
-    return {
-      trackingNumber,
-      labelUrl: result.pieceResponses?.[0]?.packageDocuments?.[0]?.url || "",
-      charges: result.shipmentRating?.totalNetCharge || 0,
-    };
+      await this.logAction("create_fedex_shipment", "completed", { trackingNumber });
+      return {
+        trackingNumber,
+        labelUrl: shipResult.pieceResponses?.[0]?.packageDocuments?.[0]?.url || "",
+        charges: shipResult.shipmentRating?.totalNetCharge || 0,
+        message: `Shipment created — tracking: ${trackingNumber}`,
+        mode: "live",
+      };
+    }
+
+    await this.logAction("create_fedex_shipment", "failed", { reason: result.message });
+    return { message: `FedEx shipment creation failed: ${result.message}`, mode: "simulated" };
   }
 
   async trackDhl(trackingNumber: string): Promise<{
     trackingNumber: string; carrier: string; status: string;
     origin: string; destination: string; estimatedDelivery: string;
     events: Array<{ date: string; location: string; description: string }>;
+    mode: "live" | "db-fallback";
   }> {
     await this.logAction("track_dhl", "started", { trackingNumber });
 
-    const data = await this.dhlReq(trackingNumber);
-    const shipment = data.shipments?.[0] || {};
-    const events = shipment.events || [];
+    if (this.dhlKey) {
+      const result = await this.safeApiCall<any>(
+        "DHL Track",
+        `${this.dhlBase}?trackingNumber=${trackingNumber}`,
+        {
+          headers: { "DHL-API-Key": this.dhlKey, "Accept": "application/json" },
+        },
+      );
 
-    await this.createShipment({
-      trackingNumber, carrier: "DHL", origin: shipment.origin?.address?.addressLocality || "",
-      destination: shipment.destination?.address?.addressLocality || "",
-      status: shipment.status?.status || "unknown",
-    });
+      if (result.ok && result.data) {
+        const shipment = result.data.shipments?.[0] || {};
+        const events = shipment.events || [];
 
-    await this.logAction("track_dhl", "completed", { trackingNumber });
+        await this.createShipment({
+          trackingNumber, carrier: "DHL", origin: shipment.origin?.address?.addressLocality || "",
+          destination: shipment.destination?.address?.addressLocality || "",
+          status: shipment.status?.status || "unknown",
+        });
+
+        await this.logAction("track_dhl", "completed", { trackingNumber });
+        return {
+          trackingNumber, carrier: "DHL",
+          status: shipment.status?.statusCode || shipment.status?.status || "unknown",
+          origin: shipment.origin?.address?.addressLocality || "",
+          destination: shipment.destination?.address?.addressLocality || "",
+          estimatedDelivery: shipment.estimatedTimeOfDelivery || "",
+          events: events.map((e: any) => ({
+            date: e.timestamp || "",
+            location: e.location?.address?.addressLocality || "",
+            description: e.description || e.status || "",
+          })),
+          mode: "live",
+        };
+      }
+    }
+
+    // DB fallback
+    const shipmentRows = await this.sql`SELECT * FROM shipments WHERE tracking_number = ${trackingNumber} AND carrier = 'DHL' ORDER BY created_at DESC LIMIT 1`;
+    const shipment = shipmentRows[0] as any;
+
+    await this.logAction("track_dhl", "completed", { trackingNumber, source: "db-fallback" });
+
+    if (shipment) {
+      return {
+        trackingNumber, carrier: "DHL",
+        status: shipment.status || "unknown",
+        origin: shipment.origin || "",
+        destination: shipment.destination || "",
+        estimatedDelivery: "",
+        events: [{ date: shipment.created_at || "", location: "", description: shipment.status || "last known status from DB" }],
+        mode: "db-fallback",
+      };
+    }
+
     return {
       trackingNumber, carrier: "DHL",
-      status: shipment.status?.statusCode || shipment.status?.status || "unknown",
-      origin: shipment.origin?.address?.addressLocality || "",
-      destination: shipment.destination?.address?.addressLocality || "",
-      estimatedDelivery: shipment.estimatedTimeOfDelivery || "",
-      events: events.map((e: any) => ({
-        date: e.timestamp || "",
-        location: e.location?.address?.addressLocality || "",
-        description: e.description || e.status || "",
-      })),
+      status: "not_found",
+      origin: "", destination: "", estimatedDelivery: "",
+      events: [],
+      mode: "db-fallback",
     };
   }
 
@@ -213,10 +318,20 @@ export class FedexMCP extends LaneworkMCPServer {
     fromName: string; fromAddress: string; fromCity: string; fromPincode: string;
     toName: string; toAddress: string; toCity: string; toPincode: string;
     weightKg: number; toCountry: string;
-  }): Promise<{ trackingNumber: string; labelUrl: string }> {
+  }): Promise<{
+    trackingNumber?: string; labelUrl?: string;
+    message: string; mode: "live" | "simulated";
+  }> {
     await this.logAction("create_dhl_shipment", "started", params);
 
-    // DHL Express Shipment API
+    if (!this.dhlKey || !this.dhlAccount) {
+      await this.logAction("create_dhl_shipment", "failed", { reason: "DHL_API_KEY missing" });
+      return {
+        message: "Requires DHL_API_KEY and DHL_ACCOUNT_NUMBER environment variables to create shipments.",
+        mode: "simulated",
+      };
+    }
+
     const body = {
       plannedShippingDateAndTime: new Date().toISOString(),
       pickup: { isRequested: true },
@@ -248,26 +363,40 @@ export class FedexMCP extends LaneworkMCPServer {
       },
     };
 
-    const res = await fetch("https://express.api.dhl.com/mydhlapi/shipments", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "DHL-API-Key": this.dhlKey,
-        "Authorization": `Basic ${Buffer.from(`${this.dhlKey}:${this.dhlAccount}`).toString("base64")}`,
+    const result = await this.safeApiCall<any>(
+      "DHL Create Shipment",
+      "https://express.api.dhl.com/mydhlapi/shipments",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "DHL-API-Key": this.dhlKey,
+          "Authorization": `Basic ${Buffer.from(`${this.dhlKey}:${this.dhlAccount}`).toString("base64")}`,
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
-    const data: any = await res.json();
+    );
 
-    const trackingNumber = data.shipmentTrackingNumber || crypto.randomUUID().slice(0, 12);
-    await this.createShipment({
-      trackingNumber, carrier: "DHL", origin: `${params.fromCity}, IN`,
-      destination: `${params.toCity}, ${params.toCountry || "US"}`,
-      customerName: params.toName, status: "created",
-    });
+    if (result.ok && result.data) {
+      const trackingNumber = result.data.shipmentTrackingNumber || crypto.randomUUID().slice(0, 12);
 
-    await this.logAction("create_dhl_shipment", "completed", { trackingNumber });
-    return { trackingNumber, labelUrl: data.documents?.[0]?.url || "" };
+      await this.createShipment({
+        trackingNumber, carrier: "DHL", origin: `${params.fromCity}, IN`,
+        destination: `${params.toCity}, ${params.toCountry || "US"}`,
+        customerName: params.toName, status: "created",
+      });
+
+      await this.logAction("create_dhl_shipment", "completed", { trackingNumber });
+      return {
+        trackingNumber,
+        labelUrl: result.data.documents?.[0]?.url || "",
+        message: `Shipment created — tracking: ${trackingNumber}`,
+        mode: "live",
+      };
+    }
+
+    await this.logAction("create_dhl_shipment", "failed", { reason: result.message });
+    return { message: `DHL shipment creation failed: ${result.message}`, mode: "simulated" };
   }
 }
 

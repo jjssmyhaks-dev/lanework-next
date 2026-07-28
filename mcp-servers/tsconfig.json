@@ -5,10 +5,9 @@
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "strict": true,
-    "outDir": "./dist",
-    "rootDir": ".",
+    "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["**/*.ts"],
+  "include": ["shared/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

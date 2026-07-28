@@ -32,41 +32,70 @@ export class ErpMCP extends LaneworkMCPServer {
     this.companyDb = process.env.SAP_COMPANY_DB || this.config.SAP_COMPANY_DB || "SBODemoIN";
   }
 
-  private async sapLogin(): Promise<string> {
-    if (this.sessionId && Date.now() < this.sessionExpiry) return this.sessionId;
-
-    const res = await fetch(`${this.serviceLayerUrl}/Login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        UserName: this.username,
-        Password: this.password,
-        CompanyDB: this.companyDb,
-      }),
-    });
-
-    if (!res.ok) throw new Error(`SAP login failed: ${res.status}`);
-    this.sessionId = res.headers.get("set-cookie")?.match(/B1SESSION=([^;]+)/)?.[1] || "";
-    this.sessionExpiry = Date.now() + 20 * 60 * 1000;
-    return this.sessionId;
+  private sapConfigured(): boolean {
+    return !!(this.serviceLayerUrl && this.username && this.password);
   }
 
-  private async sapReq(method: string, path: string, body?: any, params?: Record<string, string>): Promise<any> {
-    await this.sapLogin();
+  private async sapLogin(): Promise<string | null> {
+    if (!this.sapConfigured()) return null;
+    if (this.sessionId && Date.now() < this.sessionExpiry) return this.sessionId;
+
+    const loginResult = await this.safeApiCall<any>(
+      "SAP Login",
+      `${this.serviceLayerUrl}/Login`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          UserName: this.username,
+          Password: this.password,
+          CompanyDB: this.companyDb,
+        }),
+      },
+    );
+
+    if (!loginResult.ok || !loginResult.data) return null;
+    // Extract session from response — safeApiCall uses fetch, we need headers
+    // Re-fetch to get headers since safeApiCall strips them
+    try {
+      const res = await fetch(`${this.serviceLayerUrl}/Login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ UserName: this.username, Password: this.password, CompanyDB: this.companyDb }),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (res.ok) {
+        this.sessionId = res.headers.get("set-cookie")?.match(/B1SESSION=([^;]+)/)?.[1] || "";
+        this.sessionExpiry = Date.now() + 20 * 60 * 1000;
+        return this.sessionId;
+      }
+    } catch { /* fall through */ }
+    return null;
+  }
+
+  private async sapReq(method: string, path: string, body?: any, params?: Record<string, string>): Promise<{
+    ok: boolean; data: any; status: "live" | "simulated" | "error"; message: string;
+  }> {
+    if (!this.sapConfigured()) {
+      return { ok: false, data: null, status: "simulated", message: "SAP not configured — SAP_SERVICE_LAYER_URL missing" };
+    }
+
+    const sessionId = await this.sapLogin();
+    if (!sessionId) {
+      return { ok: false, data: null, status: "simulated", message: "SAP login failed — check credentials" };
+    }
+
     const url = new URL(`${this.serviceLayerUrl}${path}`);
     if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
 
-    const res = await fetch(url.toString(), {
+    return this.safeApiCall("SAP API", url.toString(), {
       method,
       headers: {
         "Content-Type": "application/json",
-        Cookie: `B1SESSION=${this.sessionId}`,
+        Cookie: `B1SESSION=${sessionId}`,
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-
-    if (!res.ok) throw new Error(`SAP API error: ${res.status} — ${await res.text()}`);
-    return res.json();
   }
 
   /** ─── TOOLS ─── */
@@ -74,29 +103,66 @@ export class ErpMCP extends LaneworkMCPServer {
   async syncOrders(dateFrom?: string): Promise<{
     synced: number;
     orders: Array<{ orderNumber: string; customerName: string; items: Array<{ sku: string; name: string; qty: number }>; total: number }>;
+    mode: "live" | "db-fallback";
   }> {
     await this.logAction("sync_orders", "started", { dateFrom });
 
     const from = dateFrom || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-    const data = await this.sapReq("GET", "/Orders", undefined, {
+
+    if (!this.sapConfigured()) {
+      // DB fallback: return orders from DB orders table
+      const dbOrders = await this.sql`SELECT * FROM orders WHERE created_at >= ${from}::timestamp ORDER BY created_at DESC LIMIT 100`;
+      const fallbackOrders: Array<any> = [];
+      for (const o of dbOrders as any[]) {
+        let items: Array<{ sku: string; name: string; qty: number }> = [];
+        try { items = typeof o.items === "string" ? JSON.parse(o.items) : (o.items || []); } catch {}
+        fallbackOrders.push({
+          orderNumber: o.order_number || "", customerName: o.customer_name || "",
+          items, total: o.total_amount || 0,
+        });
+      }
+      await this.logAction("sync_orders", "completed", { synced: fallbackOrders.length, source: "db-fallback" });
+      return { synced: fallbackOrders.length, orders: fallbackOrders, mode: "db-fallback" };
+    }
+
+    const result = await this.sapReq("GET", "/Orders", undefined, {
       "$filter": `DocDate ge '${from}'`,
       "$select": "DocEntry,DocNum,CardCode,CardName,DocTotal,DocDate",
     });
 
-    const orders = (data.value || []) as any[];
+    if (!result.ok || !result.data) {
+      await this.logAction("sync_orders", "failed", { reason: result.message });
+      // DB fallback
+      const dbOrders = await this.sql`SELECT * FROM orders WHERE created_at >= ${from}::timestamp ORDER BY created_at DESC LIMIT 100`;
+      const fallbackOrders: Array<any> = [];
+      for (const o of dbOrders as any[]) {
+        let items: Array<{ sku: string; name: string; qty: number }> = [];
+        try { items = typeof o.items === "string" ? JSON.parse(o.items) : (o.items || []); } catch {}
+        fallbackOrders.push({
+          orderNumber: o.order_number || "", customerName: o.customer_name || "",
+          items, total: o.total_amount || 0,
+        });
+      }
+      return { synced: fallbackOrders.length, orders: fallbackOrders, mode: "db-fallback" };
+    }
+
+    const orders = (result.data.value || []) as any[];
     const syncedOrders: Array<any> = [];
 
     for (const order of orders) {
       // Fetch order lines
-      const lines = await this.sapReq("GET", `/Orders(${order.DocEntry})`, undefined, {
+      const linesResult = await this.sapReq("GET", `/Orders(${order.DocEntry})`, undefined, {
         "$expand": "DocumentLines",
       });
 
-      const items = ((lines.DocumentLines || []) as any[]).map((line: any) => ({
-        sku: line.ItemCode || line.U_sku || "",
-        name: line.ItemDescription || "",
-        qty: line.Quantity || 1,
-      }));
+      let items: Array<{ sku: string; name: string; qty: number }> = [];
+      if (linesResult.ok && linesResult.data?.DocumentLines) {
+        items = (linesResult.data.DocumentLines as any[]).map((line: any) => ({
+          sku: line.ItemCode || line.U_sku || "",
+          name: line.ItemDescription || "",
+          qty: line.Quantity || 1,
+        }));
+      }
 
       const total = order.DocTotal || 0;
 
@@ -124,24 +190,37 @@ export class ErpMCP extends LaneworkMCPServer {
     }
 
     await this.logAction("sync_orders", "completed", { synced: syncedOrders.length });
-    return { synced: syncedOrders.length, orders: syncedOrders };
+    return { synced: syncedOrders.length, orders: syncedOrders, mode: "live" };
   }
 
-  async pushInventory(): Promise<{ synced: number }> {
+  async pushInventory(): Promise<{
+    synced: number; mode: "live" | "db-fallback";
+  }> {
     await this.logAction("push_inventory", "started", {});
+
+    if (!this.sapConfigured()) {
+      // Update local inventory movements only
+      const items = await this.sql`SELECT * FROM inventory WHERE quantity IS NOT NULL`;
+      for (const item of items) {
+        await this.sql`
+          INSERT INTO inventory_movements (id, sku, type, quantity, warehouse_id, created_at)
+          VALUES (${crypto.randomUUID()}, ${item.sku}, 'erp_sync_local', ${item.quantity || 0}, 'LOCAL', NOW())
+        `;
+      }
+      await this.logAction("push_inventory", "completed", { synced: items.length, source: "db-fallback" });
+      return { synced: items.length, mode: "db-fallback" };
+    }
 
     const items = await this.sql`SELECT * FROM inventory WHERE quantity IS NOT NULL`;
     let synced = 0;
 
     for (const item of items) {
       try {
-        // Check if item exists in SAP
-        const existing = await this.sapReq("GET", "/Items", undefined, {
+        const existingResult = await this.sapReq("GET", "/Items", undefined, {
           "$filter": `ItemCode eq '${item.sku}'`,
         });
 
-        if (existing.value?.length > 0) {
-          // Update stock via Goods Receipt or Inventory Counting
+        if (existingResult.ok && existingResult.data?.value?.length > 0) {
           await this.sapReq("PATCH", `/Items('${item.sku}')`, {
             QuantityOnStock: item.quantity || 0,
             InventoryUOM: item.unit || "pcs",
@@ -161,16 +240,62 @@ export class ErpMCP extends LaneworkMCPServer {
     }
 
     await this.logAction("push_inventory", "completed", { synced });
-    return { synced };
+    return { synced, mode: "live" };
   }
 
   async getBusinessPartner(cardCode: string): Promise<{
     code: string; name: string; type: string; phone: string; email: string;
     address: string; city: string; state: string; gstin: string; balance: number;
+    mode: "live" | "db-fallback";
   }> {
-    const data = await this.sapReq("GET", `/BusinessPartners('${cardCode}')`);
-    const bp = data;
+    if (!this.sapConfigured()) {
+      // DB fallback: look up from customers table
+      const [customer] = await this.sql`SELECT * FROM customers WHERE code = ${cardCode}`;
+      if (customer) {
+        return {
+          code: cardCode,
+          name: customer.name || "",
+          type: customer.type || "customer",
+          phone: customer.phone || "",
+          email: customer.email || "",
+          address: customer.address || "",
+          city: customer.city || "",
+          state: customer.state || "",
+          gstin: customer.gstin || "",
+          balance: customer.balance || 0,
+          mode: "db-fallback",
+        };
+      }
+      return {
+        code: cardCode, name: "", type: "unknown", phone: "", email: "",
+        address: "", city: "", state: "", gstin: "", balance: 0,
+        mode: "db-fallback",
+      };
+    }
 
+    const result = await this.sapReq("GET", `/BusinessPartners('${cardCode}')`);
+
+    if (!result.ok || !result.data) {
+      // DB fallback
+      const [customer] = await this.sql`SELECT * FROM customers WHERE code = ${cardCode}`;
+      if (customer) {
+        return {
+          code: cardCode,
+          name: customer.name || "", type: customer.type || "customer",
+          phone: customer.phone || "", email: customer.email || "",
+          address: customer.address || "", city: customer.city || "",
+          state: customer.state || "", gstin: customer.gstin || "", balance: customer.balance || 0,
+          mode: "db-fallback",
+        };
+      }
+      return {
+        code: cardCode, name: result.message || "Not available", type: "unknown",
+        phone: "", email: "", address: "", city: "", state: "", gstin: "", balance: 0,
+        mode: "db-fallback",
+      };
+    }
+
+    const bp = result.data;
     return {
       code: bp.CardCode || cardCode,
       name: bp.CardName || "",
@@ -182,22 +307,52 @@ export class ErpMCP extends LaneworkMCPServer {
       state: bp.BillToState || "",
       gstin: bp.FederalTaxID || bp.U_GSTIN || "",
       balance: bp.Balance || bp.CurrentAccountBalance || 0,
+      mode: "live",
     };
   }
 
   async syncInvoices(dateFrom?: string): Promise<{
     synced: number;
     invoices: Array<{ invoiceNo: string; customerName: string; total: number; date: string }>;
+    mode: "live" | "db-fallback";
   }> {
     await this.logAction("sync_invoices", "started", { dateFrom });
 
     const from = dateFrom || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-    const data = await this.sapReq("GET", "/Invoices", undefined, {
+
+    if (!this.sapConfigured()) {
+      // DB fallback: return from invoices table
+      const dbInvoices = await this.sql`SELECT * FROM invoices WHERE created_at >= ${from}::timestamp ORDER BY created_at DESC LIMIT 100`;
+      const fallbackInvoices: Array<any> = [];
+      for (const inv of dbInvoices as any[]) {
+        fallbackInvoices.push({
+          invoiceNo: inv.invoice_number || "", customerName: inv.customer_name || "",
+          total: inv.total_amount || 0, date: inv.invoice_date || (inv.created_at?.toISOString().slice(0, 10) || ""),
+        });
+      }
+      await this.logAction("sync_invoices", "completed", { synced: fallbackInvoices.length, source: "db-fallback" });
+      return { synced: fallbackInvoices.length, invoices: fallbackInvoices, mode: "db-fallback" };
+    }
+
+    const result = await this.sapReq("GET", "/Invoices", undefined, {
       "$filter": `DocDate ge '${from}'`,
       "$select": "DocEntry,DocNum,CardName,DocTotal,DocDate",
     });
 
-    const invoices = (data.value || []) as any[];
+    if (!result.ok || !result.data) {
+      await this.logAction("sync_invoices", "failed", { reason: result.message });
+      const dbInvoices = await this.sql`SELECT * FROM invoices WHERE created_at >= ${from}::timestamp ORDER BY created_at DESC LIMIT 100`;
+      const fallbackInvoices: Array<any> = [];
+      for (const inv of dbInvoices as any[]) {
+        fallbackInvoices.push({
+          invoiceNo: inv.invoice_number || "", customerName: inv.customer_name || "",
+          total: inv.total_amount || 0, date: inv.invoice_date || (inv.created_at?.toISOString().slice(0, 10) || ""),
+        });
+      }
+      return { synced: fallbackInvoices.length, invoices: fallbackInvoices, mode: "db-fallback" };
+    }
+
+    const invoices = (result.data.value || []) as any[];
     const syncedInvoices: Array<any> = [];
 
     for (const inv of invoices) {
@@ -218,7 +373,7 @@ export class ErpMCP extends LaneworkMCPServer {
     }
 
     await this.logAction("sync_invoices", "completed", { synced: syncedInvoices.length });
-    return { synced: syncedInvoices.length, invoices: syncedInvoices };
+    return { synced: syncedInvoices.length, invoices: syncedInvoices, mode: "live" };
   }
 }
 

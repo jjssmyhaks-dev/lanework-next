@@ -25,16 +25,19 @@ export class ComplianceMCP extends LaneworkMCPServer {
     this.apiKey = process.env.PARIVAHAN_API_KEY || this.config.PARIVAHAN_API_KEY || "";
   }
 
-  private async parivahanReq(path: string): Promise<any> {
-    if (!this.apiKey) {
-      // Fallback: use Neon DB to track compliance
-      return null;
+  private parivahanConfigured(): boolean {
+    return this.hasEnv("PARIVAHAN_API_KEY");
+  }
+
+  private async parivahanReq(path: string): Promise<{
+    ok: boolean; data: any; status: "live" | "simulated" | "error"; message: string;
+  }> {
+    if (!this.parivahanConfigured()) {
+      return { ok: false, data: null, status: "simulated", message: "Parivahan API key not configured" };
     }
-    const res = await fetch(`${this.parivahanBase}${path}`, {
+    return this.safeApiCall("Parivahan API", `${this.parivahanBase}${path}`, {
       headers: { "x-api-key": this.apiKey, "Content-Type": "application/json" },
     });
-    if (!res.ok) throw new Error(`Parivahan API error: ${res.status}`);
-    return res.json();
   }
 
   /** ─── TOOLS ─── */
@@ -42,16 +45,16 @@ export class ComplianceMCP extends LaneworkMCPServer {
   async checkDriverLicense(licenseNumber: string): Promise<{
     licenseNumber: string; valid: boolean; name: string; issuedDate: string;
     expiryDate: string; status: string; endorsements: string[];
-    daysUntilExpiry: number; alert: string;
+    daysUntilExpiry: number; alert: string; mode: "live" | "db-fallback";
   }> {
     await this.logAction("check_driver_license", "started", { licenseNumber });
     const driverId = crypto.randomUUID();
 
     // Try Parivahan API first
-    let result: any = null;
-    try { result = await this.parivahanReq(`/license/${licenseNumber}`); } catch {}
+    const apiResult = await this.parivahanReq(`/license/${licenseNumber}`);
 
-    if (result) {
+    if (apiResult.ok && apiResult.data) {
+      const result = apiResult.data;
       const daysUntilExpiry = Math.ceil((new Date(result.expiryDate).getTime() - Date.now()) / 86400000);
 
       await this.sql`
@@ -70,6 +73,7 @@ export class ComplianceMCP extends LaneworkMCPServer {
           : daysUntilExpiry <= 30 ? "⚠️ License expiring within 30 days"
           : daysUntilExpiry <= 90 ? "ℹ️ License expiring within 90 days — plan renewal"
           : "✅ License valid",
+        mode: "live",
       };
     }
 
@@ -88,6 +92,7 @@ export class ComplianceMCP extends LaneworkMCPServer {
         alert: daysUntilExpiry <= 0 ? "🚨 License expired"
           : daysUntilExpiry <= 30 ? "⚠️ Expiring soon"
           : "✅ Valid (from local records)",
+        mode: "db-fallback",
       };
     }
 
@@ -101,6 +106,7 @@ export class ComplianceMCP extends LaneworkMCPServer {
       licenseNumber, valid: true, name: "", issuedDate: "", expiryDate: "",
       status: "unverified", endorsements: [], daysUntilExpiry: 365,
       alert: "ℹ️ License not verified with RTO yet — add details manually",
+      mode: "db-fallback",
     };
   }
 
@@ -111,7 +117,7 @@ export class ComplianceMCP extends LaneworkMCPServer {
     fitnessValid: boolean; fitnessExpiry: string;
     pucValid: boolean; pucExpiry: string;
     challanCount: number; totalChallanAmount: number;
-    alerts: string[];
+    alerts: string[]; mode: "live" | "db-fallback";
   }> {
     await this.logAction("check_vehicle_registration", "started", { registrationNumber });
 
@@ -136,17 +142,19 @@ export class ComplianceMCP extends LaneworkMCPServer {
 
     // Fetch challans if Parivahan API available
     let challanCount = 0, totalChallanAmount = 0;
-    try {
-      const challanData = await this.parivahanReq(`/challan/${registrationNumber}`);
-      if (challanData) {
-        challanCount = (challanData.challans || []).length;
-        totalChallanAmount = (challanData.challans || []).reduce((sum: number, c: any) => sum + (c.amount || c.fine || 0), 0);
-        if (challanCount > 0) alerts.push(`⚠️ ${challanCount} pending challan(s) — ₹${totalChallanAmount}`);
-      }
-    } catch {
-      // DB fallback
+    let challanSource: "live" | "db-fallback" = "db-fallback";
+
+    const challanResult = await this.parivahanReq(`/challan/${registrationNumber}`);
+    if (challanResult.ok && challanResult.data) {
+      challanSource = "live";
+      const challanData = challanResult.data;
+      challanCount = (challanData.challans || challanData.data || []).length;
+      totalChallanAmount = (challanData.challans || challanData.data || []).reduce((sum: number, c: any) => sum + (c.amount || c.fine || 0), 0);
+      if (challanCount > 0) alerts.push(`⚠️ ${challanCount} pending challan(s) — ₹${totalChallanAmount}`);
+    } else {
+      // DB fallback for challans
       const [challanRows] = await this.sql`SELECT COUNT(*) as count FROM challans WHERE vehicle_reg = ${registrationNumber} AND status = 'pending'`;
-      challanCount = challanRows?.count || 0;
+      challanCount = Number(challanRows?.count) || 0;
     }
 
     return {
@@ -158,32 +166,49 @@ export class ComplianceMCP extends LaneworkMCPServer {
       pucValid: puc.valid, pucExpiry: vehicle?.puc_expiry || "",
       challanCount, totalChallanAmount,
       alerts: alerts.length > 0 ? alerts : ["✅ All clear"],
+      mode: challanSource,
     };
   }
 
-  async checkChallan(vehicleReg: string): Promise<Array<{
-    challanNo: string; date: string; violation: string; amount: number;
-    status: string; location: string; payUrl: string;
-  }>> {
-    try {
-      const data = await this.parivahanReq(`/challan/${vehicleReg}`);
-      return (data.challans || data.data || []).map((c: any) => ({
-        challanNo: c.challanNo || c.id || "",
-        date: c.challanDate || c.date || "",
-        violation: c.violation || c.offence || "",
-        amount: c.amount || c.fine || 0,
-        status: c.status || "pending",
-        location: c.location || c.place || "",
-        payUrl: c.paymentUrl || `https://echallan.parivahan.gov.in/pay/${c.challanNo}`,
-      }));
-    } catch {
-      // DB fallback
-      const rows = await this.sql`SELECT * FROM challans WHERE vehicle_reg = ${vehicleReg} ORDER BY created_at DESC`;
-      return rows.map((r: any) => ({
-        challanNo: r.id, date: r.created_at?.toISOString(), violation: r.description || "",
-        amount: r.amount || 0, status: r.status || "pending", location: r.location || "", payUrl: "",
-      }));
+  async checkChallan(vehicleReg: string): Promise<{
+    challans: Array<{
+      challanNo: string; date: string; violation: string; amount: number;
+      status: string; location: string; payUrl: string;
+    }>;
+    mode: "live" | "db-fallback";
+  }> {
+    const apiResult = await this.parivahanReq(`/challan/${vehicleReg}`);
+
+    if (apiResult.ok && apiResult.data) {
+      const challanList = apiResult.data.challans || apiResult.data.data || [];
+      return {
+        challans: challanList.map((c: any) => ({
+          challanNo: c.challanNo || c.id || "",
+          date: c.challanDate || c.date || "",
+          violation: c.violation || c.offence || "",
+          amount: c.amount || c.fine || 0,
+          status: c.status || "pending",
+          location: c.location || c.place || "",
+          payUrl: c.paymentUrl || `https://echallan.parivahan.gov.in/pay/${c.challanNo}`,
+        })),
+        mode: "live",
+      };
     }
+
+    // DB fallback
+    const rows = await this.sql`SELECT * FROM challans WHERE vehicle_reg = ${vehicleReg} ORDER BY created_at DESC`;
+    return {
+      challans: rows.map((r: any) => ({
+        challanNo: r.id,
+        date: r.created_at?.toISOString() || "",
+        violation: r.description || "",
+        amount: r.amount || 0,
+        status: r.status || "pending",
+        location: r.location || "",
+        payUrl: "",
+      })),
+      mode: "db-fallback",
+    };
   }
 
   async complianceSummary(): Promise<{
@@ -193,6 +218,7 @@ export class ComplianceMCP extends LaneworkMCPServer {
     expiringFitness: number; expiringPuc: number;
     pendingChallans: number; totalChallanAmount: number;
     criticalAlerts: string[];
+    mode: "live" | "db-fallback";
   }> {
     const drivers = await this.sql`SELECT * FROM drivers`;
     const vehicles = await this.sql`SELECT * FROM vehicles`;
@@ -213,6 +239,33 @@ export class ComplianceMCP extends LaneworkMCPServer {
     if (expiringFitness > 0) criticalAlerts.push(`⚠️ ${expiringFitness} fitness certificate(s) expiring soon`);
     if (expiringPuc > 0) criticalAlerts.push(`⚠️ ${expiringPuc} PUC certificate(s) expiring soon`);
 
+    // Try Parivahan API for challan summary
+    let pendingChallans = 0;
+    let totalChallanAmount = 0;
+    let isLive = false;
+
+    if (this.parivahanConfigured()) {
+      try {
+        const allVehicles = vehicles as any[];
+        for (const v of allVehicles) {
+          const result = await this.parivahanReq(`/challan/${v.registration}`);
+          if (result.ok && result.data) {
+            const challanList = result.data.challans || result.data.data || [];
+            pendingChallans += challanList.length;
+            totalChallanAmount += challanList.reduce((sum: number, c: any) => sum + (c.amount || c.fine || 0), 0);
+            isLive = true;
+          }
+        }
+      } catch { /* fall through to DB */ }
+    }
+
+    if (!isLive) {
+      const [challanResult] = await this.sql`SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total FROM challans WHERE status = 'pending'`;
+      pendingChallans = Number(challanResult?.count) || 0;
+      totalChallanAmount = Number(challanResult?.total) || 0;
+    }
+
+    if (pendingChallans > 0) criticalAlerts.push(`⚠️ ${pendingChallans} pending challan(s) — ₹${totalChallanAmount}`);
     if (criticalAlerts.length === 0) criticalAlerts.push("✅ Fleet fully compliant");
 
     await this.logAction("compliance_summary", "completed", { drivers: drivers.length, vehicles: vehicles.length });
@@ -225,8 +278,9 @@ export class ComplianceMCP extends LaneworkMCPServer {
         !expiring(v.insurance_expiry, 30) && !expiring(v.fitness_expiry, 30) && !expiring(v.puc_expiry, 15)
       ).length,
       expiringLicenses, expiringInsurance, expiringFitness, expiringPuc,
-      pendingChallans: 0, totalChallanAmount: 0, // filled by challan checks
+      pendingChallans, totalChallanAmount,
       criticalAlerts,
+      mode: isLive ? "live" : "db-fallback",
     };
   }
 }

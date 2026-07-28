@@ -32,37 +32,53 @@ export class ShopifyMCP extends LaneworkMCPServer {
     this.wooSecret = process.env.WOO_CONSUMER_SECRET || this.config.WOO_CONSUMER_SECRET || "";
   }
 
+  private shopifyConfigured(): boolean {
+    return !!(this.shopifyUrl && this.shopifyToken);
+  }
+
+  private wooConfigured(): boolean {
+    return !!(this.wooUrl && this.wooKey && this.wooSecret);
+  }
+
   /** ─── SHOPIFY ─── */
-  private async shopifyReq(path: string): Promise<any> {
+  private async shopifyReq(path: string): Promise<{ ok: boolean; data: any; status: "live" | "simulated" | "error"; message: string }> {
     const url = `https://${this.shopifyUrl}/admin/api/2024-01${path}`;
-    const res = await fetch(url, {
+    return this.safeApiCall("Shopify API", url, {
       headers: { "X-Shopify-Access-Token": this.shopifyToken, "Content-Type": "application/json" },
     });
-    if (!res.ok) throw new Error(`Shopify API error: ${res.status}`);
-    return res.json();
   }
 
   /** ─── WOOCOMMERCE ─── */
-  private async woocommerceReq(path: string): Promise<any> {
+  private async woocommerceReq(path: string): Promise<{ ok: boolean; data: any; status: "live" | "simulated" | "error"; message: string }> {
     const url = `${this.wooUrl}/wp-json/wc/v3${path}`;
     const auth = Buffer.from(`${this.wooKey}:${this.wooSecret}`).toString("base64");
-    const res = await fetch(url, {
+    return this.safeApiCall("WooCommerce API", url, {
       headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
     });
-    if (!res.ok) throw new Error(`WooCommerce API error: ${res.status}`);
-    return res.json();
   }
 
   /** ─── TOOLS ─── */
 
-  async syncOrdersShopify(limit: number = 50): Promise<{ synced: number; platform: string }> {
-    if (!this.shopifyUrl || !this.shopifyToken) {
-      return { synced: 0, platform: "shopify_skipped" };
+  async syncOrdersShopify(limit: number = 50): Promise<{
+    synced: number; platform: string; mode: "live" | "db-fallback";
+  }> {
+    if (!this.shopifyConfigured()) {
+      await this.logAction("sync_orders_shopify", "failed", { reason: "SHOPIFY_ACCESS_TOKEN missing" });
+      return { synced: 0, platform: "shopify_unconfigured", mode: "db-fallback" };
     }
+
     await this.logAction("sync_orders_shopify", "started", { limit });
 
-    const data = await this.shopifyReq(`/orders.json?limit=${limit}&status=any&financial_status=paid`);
-    const orders = data.orders || [];
+    const result = await this.shopifyReq(`/orders.json?limit=${limit}&status=any&financial_status=paid`);
+
+    if (!result.ok || !result.data) {
+      await this.logAction("sync_orders_shopify", "failed", { reason: result.message });
+      // DB fallback: return orders from DB
+      const dbOrders = await this.sql`SELECT COUNT(*) as count FROM orders WHERE platform = 'shopify'`;
+      return { synced: dbOrders[0]?.count || 0, platform: "shopify_db_fallback", mode: "db-fallback" };
+    }
+
+    const orders = result.data.orders || [];
 
     for (const order of orders) {
       const items = (order.line_items || []).map((li: any) => ({
@@ -80,7 +96,6 @@ export class ShopifyMCP extends LaneworkMCPServer {
         ON CONFLICT (order_number) DO UPDATE SET status = ${order.fulfillment_status || "unfulfilled"}, updated_at = NOW()
       `;
 
-      // Upsert customer
       if (order.customer?.email) {
         await this.sql`
           INSERT INTO customers (id, name, email, phone, code, created_at, updated_at)
@@ -94,16 +109,28 @@ export class ShopifyMCP extends LaneworkMCPServer {
     }
 
     await this.logAction("sync_orders_shopify", "completed", { synced: orders.length });
-    return { synced: orders.length, platform: "shopify" };
+    return { synced: orders.length, platform: "shopify", mode: "live" };
   }
 
-  async syncOrdersWooCommerce(limit: number = 50): Promise<{ synced: number; platform: string }> {
-    if (!this.wooUrl || !this.wooKey || !this.wooSecret) {
-      return { synced: 0, platform: "woocommerce_skipped" };
+  async syncOrdersWooCommerce(limit: number = 50): Promise<{
+    synced: number; platform: string; mode: "live" | "db-fallback";
+  }> {
+    if (!this.wooConfigured()) {
+      await this.logAction("sync_orders_woocommerce", "failed", { reason: "WooCommerce creds missing" });
+      return { synced: 0, platform: "woocommerce_unconfigured", mode: "db-fallback" };
     }
+
     await this.logAction("sync_orders_woocommerce", "started", { limit });
 
-    const orders = await this.woocommerceReq(`/orders?per_page=${limit}&status=processing,pending`);
+    const result = await this.woocommerceReq(`/orders?per_page=${limit}&status=processing,pending`);
+
+    if (!result.ok || !result.data) {
+      await this.logAction("sync_orders_woocommerce", "failed", { reason: result.message });
+      const dbOrders = await this.sql`SELECT COUNT(*) as count FROM orders WHERE platform = 'woocommerce'`;
+      return { synced: dbOrders[0]?.count || 0, platform: "woocommerce_db_fallback", mode: "db-fallback" };
+    }
+
+    const orders = Array.isArray(result.data) ? result.data : [];
 
     for (const order of orders) {
       const items = (order.line_items || []).map((li: any) => ({
@@ -123,21 +150,25 @@ export class ShopifyMCP extends LaneworkMCPServer {
     }
 
     await this.logAction("sync_orders_woocommerce", "completed", { synced: orders.length });
-    return { synced: orders.length, platform: "woocommerce" };
+    return { synced: orders.length, platform: "woocommerce", mode: "live" };
   }
 
-  async syncInventory(): Promise<{ synced: number; updated: number }> {
+  async syncInventory(): Promise<{
+    synced: number; updated: number; mode: "live" | "simulated";
+  }> {
     await this.logAction("sync_inventory", "started", {});
+
     const items = await this.sql`SELECT * FROM inventory WHERE quantity IS NOT NULL`;
     let synced = 0;
+    let liveSyncs = 0;
 
     // Push to Shopify
-    if (this.shopifyUrl && this.shopifyToken) {
+    if (this.shopifyConfigured()) {
       for (const item of items) {
         try {
-          const products = await this.shopifyReq(`/products.json?sku=${item.sku}`);
-          if (products.products?.length > 0) {
-            const product = products.products[0];
+          const result = await this.shopifyReq(`/products.json?sku=${item.sku}`);
+          if (result.ok && result.data?.products?.length > 0) {
+            const product = result.data.products[0];
             const variant = product.variants?.find((v: any) => v.sku === item.sku);
             if (variant) {
               await fetch(`https://${this.shopifyUrl}/admin/api/2024-01/inventory_levels/set.json`, {
@@ -148,41 +179,50 @@ export class ShopifyMCP extends LaneworkMCPServer {
                   location_id: variant.inventory_management?.split(":")[2] || "",
                   available: item.quantity,
                 }),
+                signal: AbortSignal.timeout(10000),
               });
             }
           }
-          synced++;
-        } catch {}
+          liveSyncs++;
+        } catch { /* skip individual product failures */ }
+        synced++;
       }
     }
 
     // Push to WooCommerce
-    if (this.wooUrl && this.wooKey) {
+    if (this.wooConfigured()) {
       for (const item of items) {
         try {
-          const products = await this.woocommerceReq(`/products?sku=${item.sku}`);
-          if (products.length > 0) {
-            await fetch(`${this.wooUrl}/wp-json/wc/v3/products/${products[0].id}`, {
+          const result = await this.woocommerceReq(`/products?sku=${item.sku}`);
+          if (result.ok && Array.isArray(result.data) && result.data.length > 0) {
+            await fetch(`${this.wooUrl}/wp-json/wc/v3/products/${result.data[0].id}`, {
               method: "PUT",
               headers: {
                 Authorization: `Basic ${Buffer.from(`${this.wooKey}:${this.wooSecret}`).toString("base64")}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({ stock_quantity: item.quantity, stock_status: item.quantity > 0 ? "instock" : "outofstock" }),
+              signal: AbortSignal.timeout(10000),
             });
           }
-          synced++;
-        } catch {}
+          liveSyncs++;
+        } catch { /* skip individual product failures */ }
+        synced++;
       }
     }
 
-    await this.logAction("sync_inventory", "completed", { synced });
-    return { synced, updated: synced };
+    const mode: "live" | "simulated" = (this.shopifyConfigured() || this.wooConfigured()) ? "live" : "simulated";
+
+    await this.logAction("sync_inventory", "completed", { synced, liveSyncs, mode });
+    return { synced, updated: liveSyncs, mode };
   }
 
-  async getOrderStatus(orderNumber: string): Promise<{ orderNumber: string; status: string; platform: string; trackingNumber?: string }> {
+  async getOrderStatus(orderNumber: string): Promise<{
+    orderNumber: string; status: string; platform: string;
+    trackingNumber?: string; mode: "live" | "db-fallback";
+  }> {
     const [order] = await this.sql`SELECT * FROM orders WHERE order_number = ${orderNumber}`;
-    if (!order) return { orderNumber, status: "not_found", platform: "unknown" };
+    if (!order) return { orderNumber, status: "not_found", platform: "unknown", mode: "db-fallback" };
 
     // Check Shiprocket for tracking
     let trackingNumber: string | undefined;
@@ -191,11 +231,14 @@ export class ShopifyMCP extends LaneworkMCPServer {
         SELECT items::jsonb->0->>'sku' FROM orders WHERE order_number = ${orderNumber}
       )`;
       trackingNumber = shipment?.tracking_number;
-    } catch {}
+    } catch { /* tracking lookup is best-effort */ }
 
     return {
-      orderNumber, status: order.status || "unknown", platform: order.platform || "unknown",
+      orderNumber,
+      status: order.status || "unknown",
+      platform: order.platform || "unknown",
       trackingNumber,
+      mode: "db-fallback",
     };
   }
 }

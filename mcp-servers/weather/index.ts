@@ -45,8 +45,8 @@ export class WeatherMCP extends LaneworkMCPServer {
     const data = await this.weatherReq("/weather", { lat: String(lat), lon: String(lng), units: "metric" });
 
     const alerts: string[] = [];
-    if (data.visibility < 1000) alerts.push("⚠️ Low visibility — driving hazardous");
-    if ((data.rain?.{"1h" || 0) > 10) alerts.push("🌧️ Heavy rain — flooding risk");
+    if (data.visibility < 1000) alerts.push("\u26a0\ufe0f Low visibility — driving hazardous");
+    if ((data.rain?.["1h"] || 0) > 10) alerts.push("\ud83c\udf27\ufe0f Heavy rain — flooding risk");
     if (data.wind?.speed > 40) alerts.push("💨 Strong winds — truck stability risk");
     if (data.main?.temp > 45) alerts.push("🔥 Extreme heat — vehicle overheating risk");
     if (data.main?.temp < 2) alerts.push("❄️ Freezing conditions — road ice risk");
