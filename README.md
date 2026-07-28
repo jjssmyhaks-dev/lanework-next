@@ -9,7 +9,7 @@ lanework-next/
 ├── src/                          # Next.js 16 frontend (App Router)
 │   ├── app/
 │   │   ├── (auth)/               # Login & Register
-│   │   ├── (dashboard)/          # 10 pages: Dashboard, Shipments, Inventory, Routes,
+│   │   ├── (dashboard)/          # 11 pages: Dashboard, Shipments, Inventory, Routes,
 │   │   │                         #   Warehouse, Fleet, Customers, Agents, Copilot, Integrations
 │   │   ├── agents/               # 6 agent detail pages with trust controls
 │   │   ├── api/                  # 40+ REST API endpoints
@@ -22,16 +22,23 @@ lanework-next/
 │   ├── components/ui/            # Reusable UI components (Card, Button, Input, Badge, etc.)
 │   └── lib/                      # Database, Auth, AI, Utils
 │
-├── mcp-servers/                  # 8 MCP servers for agent tooling
+├── mcp-servers/                  # 15 MCP servers with 58 tools
 │   ├── shared/server.ts          # Base class (PostgreSQL, logging, config)
-│   ├── shiprocket/               # §1 Carrier aggregator (7+ Indian carriers)
-│   ├── tally/                    # §2 TallyPrime inventory/order sync
-│   ├── ewaybill/                 # §3 GSTN e-way bill generation
-│   ├── mapmyindia/               # §4 Route optimization + geocoding
-│   ├── fleet/                    # §5 Telematics (LocoNav/FleetX/Vamosys)
-│   ├── email/                    # §6 Customer emails (Resend SMTP)
-│   ├── wms/                      # §7 Warehouse adapter
-│   └── scanner/                  # §8 Barcode/QR pick verification
+│   ├── shiprocket/               # §1  Carrier aggregator (7+ Indian carriers)
+│   ├── tally/                    # §2  TallyPrime inventory/order sync
+│   ├── ewaybill/                 # §3  GSTN e-way bill generation
+│   ├── mapmyindia/               # §4  Route optimization + geocoding
+│   ├── fleet/                    # §5  Telematics (LocoNav/FleetX/Vamosys)
+│   ├── email/                    # §6  Customer emails (Resend SMTP)
+│   ├── wms/                      # §7  Warehouse adapter
+│   ├── scanner/                  # §8  Barcode/QR pick verification
+│   ├── googlesheets/             # §9  Google Sheets 2-way sync
+│   ├── weather/                  # §10 OpenWeatherMap route disruption alerts
+│   ├── compliance/               # §11 RTO/Parivahan license + vehicle compliance
+│   ├── erp/                      # §12 SAP B1 order/inventory/invoice sync
+│   ├── shopify/                  # §13 Shopify + WooCommerce D2C order sync
+│   ├── fedex/                    # §14 FedEx + DHL international shipping
+│   └── dockscheduler/            # §15 Granular dock booking + carrier check-in/out
 │
 ├── backend/                      # Python agent system (legacy — merged into Next.js)
 ├── scripts/                      # DB migration, debug, env import tools
@@ -46,7 +53,7 @@ lanework-next/
 - **Typewriter hero** — "Your logistics operation, *running itself.*" typed in real-time
 - **Animated How It Works** — 3-card carousel with expand/collapse, auto-cycle every 4s
 - **Nav dropdowns** — 5 sections (Product, Agents, How it Works, Pricing, Docs) with hover menus
-- **4 standalone pages** — Docs, Pricing, How it Works, Trust & Safety
+- **5 standalone pages** — Docs, Pricing, How it Works, Trust & Safety, Integrations catalog
 
 ### Dashboard
 - **Progressive onboarding** — New users see a 4-step guided wizard (Connect → Ship → Inventory → Configure)
@@ -56,39 +63,48 @@ lanework-next/
 ### AI Agents (6)
 | Agent | Location | Key Capabilities |
 |-------|----------|-----------------|
-| Shipment Tracking | `/agents/shipment-tracking` | Multi-carrier tracking, delay prediction, webhooks |
-| Inventory Management | `/agents/inventory-management` | Auto-reorder, demand forecasting, Tally sync |
-| Route Optimization | `/agents/route-optimization` | Real-time rerouting, fuel savings, MapmyIndia |
-| Warehouse Operations | `/agents/warehouse-operations` | Pick paths, dock scheduling, barcode scanning |
-| Fleet Management | `/agents/fleet-management` | Maintenance, compliance, GPS telematics |
-| Customer Communication | `/agents/customer-communication` | Auto-reply, WhatsApp, email, sentiment routing |
+| Shipment Tracking | `/agents/shipment-tracking` | Multi-carrier tracking, delay prediction, webhooks, Shiprocket + FedEx/DHL |
+| Inventory Management | `/agents/inventory-management` | Auto-reorder, demand forecasting, TallyPrime + Google Sheets + Shopify/WooCommerce |
+| Route Optimization | `/agents/route-optimization` | Real-time rerouting, fuel savings, MapmyIndia + Weather disruption alerts |
+| Warehouse Operations | `/agents/warehouse-operations` | Pick paths, dock scheduling, barcode scanning, carrier check-in/out |
+| Fleet Management | `/agents/fleet-management` | Maintenance, GPS telematics, RTO compliance, driver license verification |
+| Customer Communication | `/agents/customer-communication` | Auto-reply, WhatsApp, email, SAP B1 ERP sync |
 
-### Integrations (17 total, 3 tiers)
-
-| Tier | Integrations |
-|------|-------------|
-| **Universal** | CSV Import/Export, WhatsApp Business API, Google Sheets Sync, Generic Webhook (✅ built) |
-| **India-Specific** | Shiprocket, TallyPrime, GSTN e-Way Bill, Razorpay |
-| **Scale** | SAP B1, MapmyIndia, Shopify, WooCommerce, Amazon Seller, Flipkart Seller, LocoNav, FleetX |
-
-- **1-click connect/disconnect** from `/integrations` dashboard
-- **Quick Setup card** for first-time users (top 4 integrations)
-- **Search + filter** by tier
-- **Real-time status** (connected pulse + green dot)
-
-### MCP Servers (8)
+### MCP Servers (15 total, 58 tools)
 All servers extend `LaneworkMCPServer` with shared PostgreSQL logging, config loading, and webhook event tracking:
 
-| Server | Agent | Tools |
-|--------|-------|-------|
-| **Shiprocket** | Shipment Tracking | `track_shipment`, `create_shipment`, `get_rates`, `cancel_shipment` |
-| **TallyPrime** | Inventory | `sync_inventory`, `sync_orders`, `get_ledger`, `check_stock` |
-| **E-Way Bill** | Shipment Tracking | `generate_ewaybill`, `cancel_ewaybill`, `get_ewaybill`, `validate_gstin` |
-| **MapmyIndia** | Route Optimization | `geocode`, `reverse_geocode`, `optimize_route`, `distance_matrix` |
-| **Fleet** | Fleet Management | `track_vehicle`, `get_fleet_status`, `schedule_maintenance`, `get_driver_report` |
-| **Email** | Customer Comms | `send_tracking_update`, `auto_reply`, `check_inbox` |
-| **WMS** | Warehouse | `get_dock_schedule`, `assign_pick_task`, `check_inventory`, `receive_shipment` |
-| **Scanner** | Warehouse | `verify_pick`, `receive_item`, `check_sku`, `generate_label` |
+| # | Server | Agent | Tools |
+|---|--------|-------|-------|
+| 1 | **Shiprocket** | Shipment Tracking | `track_shipment`, `create_shipment`, `get_rates`, `cancel_shipment` |
+| 2 | **TallyPrime** | Inventory | `sync_inventory`, `sync_orders`, `get_ledger`, `check_stock` |
+| 3 | **E-Way Bill (GSTN)** | Shipment Tracking | `generate_ewaybill`, `cancel_ewaybill`, `get_ewaybill`, `validate_gstin` |
+| 4 | **MapmyIndia** | Route Optimization | `geocode`, `reverse_geocode`, `optimize_route`, `distance_matrix` |
+| 5 | **Fleet Telematics** | Fleet Management | `track_vehicle`, `get_fleet_status`, `schedule_maintenance`, `get_driver_report` |
+| 6 | **Email (Resend)** | Customer Comms | `send_tracking_update`, `auto_reply`, `check_inbox` |
+| 7 | **WMS** | Warehouse | `get_dock_schedule`, `assign_pick_task`, `check_inventory`, `receive_shipment` |
+| 8 | **Scanner** | Warehouse | `verify_pick`, `receive_item`, `check_sku`, `generate_label` |
+| 9 | **Google Sheets** | Inventory | `read_sheet`, `write_sheet`, `sync_to_db`, `sync_from_db` |
+| 10 | **Weather** | Route Optimization | `current_weather`, `route_weather`, `weather_alerts`, `daily_forecast` |
+| 11 | **Compliance (RTO)** | Fleet Management | `check_driver_license`, `check_vehicle_registration`, `check_challan`, `compliance_summary` |
+| 12 | **ERP (SAP B1)** | Customer Comms | `sync_orders`, `push_inventory`, `get_business_partner`, `sync_invoices` |
+| 13 | **Shopify/WooCommerce** | Inventory | `sync_orders_shopify`, `sync_orders_woo`, `sync_inventory`, `get_order_status` |
+| 14 | **FedEx/DHL** | Shipment Tracking | `track_fedex`, `create_fedex_shipment`, `track_dhl`, `create_dhl_shipment` |
+| 15 | **Dock Scheduler** | Warehouse | `book_dock`, `get_dock_availability`, `check_in_carrier`, `release_dock` |
+
+### Shared Infrastructure (5 built-in MCPs)
+| MCP | Implementation |
+|-----|---------------|
+| PostgreSQL | `LaneworkMCPServer` base class — all servers inherit direct DB access |
+| Webhook Receiver | `/api/webhooks/inbound/[id]` + `/api/webhooks/whatsapp/[id]` |
+| Cloudflare AI | `src/lib/ai.ts` — Llama 3 8B for reasoning, sentiment, classification |
+| CSV/Excel | `/api/import/csv` + `/api/export/csv` |
+| WhatsApp | `/api/webhooks/whatsapp/[id]` — Meta verification + message processing |
+
+### Integrations Dashboard
+- **17-catalog** across 3 tiers (Universal, India-Specific, Scale)
+- **1-click connect/disconnect** from `/integrations`
+- **Quick Setup card** for first-time users (top 4 integrations)
+- **Search + tier filter** + real-time connected status
 
 ### API Endpoints (40+)
 
@@ -97,12 +113,12 @@ All servers extend `LaneworkMCPServer` with shared PostgreSQL logging, config lo
 | **Auth** | `/api/auth/login`, `/api/auth/register`, `/api/auth/me`, `/api/auth/forgot-password` |
 | **Dashboard** | `/api/dashboard/stats` |
 | **AI** | `/api/ai` (GET + POST — Cloudflare Workers AI) |
-| **Shipments** | `/api/shipment` (CRUD) |
-| **Inventory** | `/api/inventory/[id]` (CRUD) |
-| **Routes** | `/api/routes` (CRUD) |
-| **Warehouse** | `/api/warehouse/[id]` (CRUD) |
+| **Shipments** | `/api/shipment`, `/api/shipment/[id]` |
+| **Inventory** | `/api/inventory/[id]` |
+| **Routes** | `/api/routes`, `/api/routes/[id]` |
+| **Warehouse** | `/api/warehouse/[id]` |
 | **Fleet** | `/api/fleet/drivers/[id]`, `/api/fleet/vehicles/[id]` |
-| **Customers** | `/api/customer` (CRUD) |
+| **Customers** | `/api/customer`, `/api/customer/[id]` |
 | **Integrations** | `/api/integrations` (catalog + connect), `/api/integrations/[id]` (manage) |
 | **Webhooks** | `/api/webhooks/inbound/[id]`, `/api/webhooks/whatsapp/[id]` |
 | **Import/Export** | `/api/import/csv`, `/api/export/csv` |
@@ -120,7 +136,7 @@ All servers extend `LaneworkMCPServer` with shared PostgreSQL logging, config lo
 | Auth | Custom JWT (`jose`) — cookie-based sessions |
 | Database | Neon PostgreSQL (serverless, 35+ tables) |
 | AI | Cloudflare Workers AI (Llama 3 8B) |
-| Agent Framework | MCP (Model Context Protocol) |
+| Agent Framework | MCP (Model Context Protocol) — 15 servers |
 | Hosting | Vercel (bom1 region) |
 | Icons | Lucide React |
 
@@ -143,10 +159,10 @@ Edit `.env.local` with your credentials:
 
 ```env
 DATABASE_URL="postgresql://..."
-NEXTAUTH_SECRET="your-secret-key"
+NEXTAUTH_SECRET="***"
 NEXTAUTH_URL="http://localhost:3000"
 CLOUDFLARE_AI_ACCOUNT_ID="..."
-CLOUDFLARE_AI_API_KEY="..."
+CLOUDFLARE_AI_API_KEY="***"
 ```
 
 ```bash
@@ -191,13 +207,22 @@ npx vercel --prod --yes
 | `NEXTAUTH_URL` | ✅ | App URL (`https://lanework.vercel.app` in production) |
 | `CLOUDFLARE_AI_ACCOUNT_ID` | — | Cloudflare Workers AI account |
 | `CLOUDFLARE_AI_API_KEY` | — | Cloudflare Workers AI API key |
-| `SHIPROCKET_EMAIL` | — | Shiprocket login email |
-| `SHIPROCKET_PASSWORD` | — | Shiprocket login password |
-| `TALLY_REST_URL` | — | TallyPrime REST API URL (default: `http://localhost:9000`) |
+| `SHIPROCKET_EMAIL` | — | Shiprocket login |
+| `SHIPROCKET_PASSWORD` | — | Shiprocket password |
+| `TALLY_REST_URL` | — | TallyPrime REST API URL |
 | `GSTN_API_KEY` | — | GSTN e-way bill API key |
-| `FLEET_API_KEY` | — | Fleet telematics API key |
 | `MAPMYINDIA_API_KEY` | — | MapmyIndia API key |
-| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | — | Email (Resend) SMTP credentials |
+| `FLEET_API_KEY` | — | Fleet telematics API key |
+| `OPENWEATHER_API_KEY` | — | OpenWeatherMap API key |
+| `PARIVAHAN_API_KEY` | — | RTO/Parivahan API key |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | — | Google Sheets service account JSON |
+| `GOOGLE_SHEETS_SPREADSHEET_ID` | — | Default spreadsheet ID |
+| `SAP_SERVICE_LAYER_URL` | — | SAP B1 Service Layer URL |
+| `SHOPIFY_STORE_URL` / `SHOPIFY_ACCESS_TOKEN` | — | Shopify credentials |
+| `WOO_STORE_URL` / `WOO_CONSUMER_KEY` | — | WooCommerce credentials |
+| `FEDEX_API_KEY` / `FEDEX_SECRET_KEY` | — | FedEx API credentials |
+| `DHL_API_KEY` / `DHL_ACCOUNT_NUMBER` | — | DHL API credentials |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | — | Email (Resend) SMTP |
 
 ## Rollback Strategy
 
