@@ -1,6 +1,6 @@
 # Lanework — The Agentic Operating System for Logistics
 
-A full-stack AI-powered logistics platform with **Next.js 16 frontend** + **6 Python AI agents** + **Neon PostgreSQL** + **Cloudflare Workers AI**.
+Your logistics operation, **running itself.** Lanework is a team of 6 AI agents that track shipments, manage inventory, optimize routes, and handle the thousand small decisions your ops team makes every day — plugged into the systems you already use.
 
 ## Architecture
 
@@ -8,164 +8,196 @@ A full-stack AI-powered logistics platform with **Next.js 16 frontend** + **6 Py
 lanework-next/
 ├── src/                          # Next.js 16 frontend (App Router)
 │   ├── app/
-│   │   ├── (auth)/               # Login & Register pages
-│   │   ├── (dashboard)/          # 8 protected dashboard pages
-│   │   ├── api/                  # 18 REST API endpoints
-│   │   ├── page.tsx              # Landing page (Pentagram design)
-│   │   └── globals.css           # Design system
-│   ├── components/ui/            # Reusable UI (Card, Button, Input, etc.)
-│   └── lib/                      # DB, Auth, AI, Utils
-│
-├── backend/                      # Python agent system (from logi repo)
-│   ├── agents/                   # 6 AI agents (FastAPI)
-│   │   ├── shipment-tracking/    # §1 Carrier tracking + ETA drift
-│   │   ├── inventory-management/# §2 Stock monitoring + reorder
-│   │   ├── route-optimization/   # §3 Dynamic routing
-│   │   ├── warehouse-ops/        # §4 Pick/pack/ship + dock scheduling
-│   │   ├── fleet-management/     # §5 HOS compliance + maintenance
-│   │   └── customer-support/     # §6 Auto-replies + sentiment
+│   │   ├── (auth)/               # Login & Register
+│   │   ├── (dashboard)/          # 10 pages: Dashboard, Shipments, Inventory, Routes,
+│   │   │                         #   Warehouse, Fleet, Customers, Agents, Copilot, Integrations
+│   │   ├── agents/               # 6 agent detail pages with trust controls
+│   │   ├── api/                  # 40+ REST API endpoints
+│   │   ├── docs/                 # Developer documentation
+│   │   ├── pricing/              # Pricing page (4 tiers)
+│   │   ├── how-it-works/         # How Lanework Works
+│   │   ├── trust/                # Trust & Safety page
+│   │   └── page.tsx              # Landing page with animated hero + interactive sections
 │   │
-│   ├── apps/                     # Supporting services
-│   │   ├── orchestrator/         # LangGraph orchestration
-│   │   ├── api-gateway/          # Auth + tenant routing
-│   │   ├── chat-copilot/         # Conversation router
-│   │   ├── voice-gateway/        # LiveKit voice agent
-│   │   └── dashboard/            # React+Vite dashboard (alt)
-│   │
-│   └── packages/                 # Shared libraries
-│       ├── db/                   # SQLAlchemy models
-│       ├── shared-types/         # Pydantic schemas
-│       └── tool-bus/             # MCP client + tool definitions
+│   ├── components/ui/            # Reusable UI components (Card, Button, Input, Badge, etc.)
+│   └── lib/                      # Database, Auth, AI, Utils
 │
+├── mcp-servers/                  # 8 MCP servers for agent tooling
+│   ├── shared/server.ts          # Base class (PostgreSQL, logging, config)
+│   ├── shiprocket/               # §1 Carrier aggregator (7+ Indian carriers)
+│   ├── tally/                    # §2 TallyPrime inventory/order sync
+│   ├── ewaybill/                 # §3 GSTN e-way bill generation
+│   ├── mapmyindia/               # §4 Route optimization + geocoding
+│   ├── fleet/                    # §5 Telematics (LocoNav/FleetX/Vamosys)
+│   ├── email/                    # §6 Customer emails (Resend SMTP)
+│   ├── wms/                      # §7 Warehouse adapter
+│   └── scanner/                  # §8 Barcode/QR pick verification
+│
+├── backend/                      # Python agent system (legacy — merged into Next.js)
+├── scripts/                      # DB migration, debug, env import tools
+├── vercel.json                   # Vercel deployment config
 ├── .env.example                  # Environment template
-├── README.md
 └── package.json
 ```
 
 ## Features
 
-### Frontend (Next.js 16)
-- **Landing Page** — Pentagram monochrome design, 12 sections (Hero, Problem, Solution, Agents, Pricing, FAQ, etc.)
-- **Dashboard** — Stats cards, agent activity feed, quick actions
-- **8 protected pages** — Shipment, Inventory, Routes, Warehouse, Fleet, Customer, Agents, Dashboard
-- **Auth** — Register/Login with NextAuth.js v5 + Neon DB
-- **Cloudflare AI** — 4 AI functions (shipment analysis, route optimization, sentiment, reasoning)
+### Landing Page
+- **Typewriter hero** — "Your logistics operation, *running itself.*" typed in real-time
+- **Animated How It Works** — 3-card carousel with expand/collapse, auto-cycle every 4s
+- **Nav dropdowns** — 5 sections (Product, Agents, How it Works, Pricing, Docs) with hover menus
+- **4 standalone pages** — Docs, Pricing, How it Works, Trust & Safety
 
-### Backend (Python / FastAPI)
-- **6 AI Agents** (30 files, ~430KB) — each with:`__init__.py`, `config.py`, `schemas.py`, `service.py`, `main.py`
-- **Trust Level System** — Propose-only / Auto-execute / Fully-autonomous per action
-- **AgentTask Audit** — Every action creates a reasoned audit trail
-- **MCP Tool Bus** — Cross-agent & 3rd-party API integration
-- **Webhook System** — 37 event types across all agents
-- **Tenant Isolation** — Row-level security in PostgreSQL
+### Dashboard
+- **Progressive onboarding** — New users see a 4-step guided wizard (Connect → Ship → Inventory → Configure)
+- **Active dashboard** — Stats cards, quick actions, recent activity (shown only when data exists)
+- **11 sidebar items** — Dashboard, Agents, Copilot, Setup, Shipments, Inventory, Routes, Warehouse, Fleet, Customers, Integrations
+
+### AI Agents (6)
+| Agent | Location | Key Capabilities |
+|-------|----------|-----------------|
+| Shipment Tracking | `/agents/shipment-tracking` | Multi-carrier tracking, delay prediction, webhooks |
+| Inventory Management | `/agents/inventory-management` | Auto-reorder, demand forecasting, Tally sync |
+| Route Optimization | `/agents/route-optimization` | Real-time rerouting, fuel savings, MapmyIndia |
+| Warehouse Operations | `/agents/warehouse-operations` | Pick paths, dock scheduling, barcode scanning |
+| Fleet Management | `/agents/fleet-management` | Maintenance, compliance, GPS telematics |
+| Customer Communication | `/agents/customer-communication` | Auto-reply, WhatsApp, email, sentiment routing |
+
+### Integrations (17 total, 3 tiers)
+
+| Tier | Integrations |
+|------|-------------|
+| **Universal** | CSV Import/Export, WhatsApp Business API, Google Sheets Sync, Generic Webhook (✅ built) |
+| **India-Specific** | Shiprocket, TallyPrime, GSTN e-Way Bill, Razorpay |
+| **Scale** | SAP B1, MapmyIndia, Shopify, WooCommerce, Amazon Seller, Flipkart Seller, LocoNav, FleetX |
+
+- **1-click connect/disconnect** from `/integrations` dashboard
+- **Quick Setup card** for first-time users (top 4 integrations)
+- **Search + filter** by tier
+- **Real-time status** (connected pulse + green dot)
+
+### MCP Servers (8)
+All servers extend `LaneworkMCPServer` with shared PostgreSQL logging, config loading, and webhook event tracking:
+
+| Server | Agent | Tools |
+|--------|-------|-------|
+| **Shiprocket** | Shipment Tracking | `track_shipment`, `create_shipment`, `get_rates`, `cancel_shipment` |
+| **TallyPrime** | Inventory | `sync_inventory`, `sync_orders`, `get_ledger`, `check_stock` |
+| **E-Way Bill** | Shipment Tracking | `generate_ewaybill`, `cancel_ewaybill`, `get_ewaybill`, `validate_gstin` |
+| **MapmyIndia** | Route Optimization | `geocode`, `reverse_geocode`, `optimize_route`, `distance_matrix` |
+| **Fleet** | Fleet Management | `track_vehicle`, `get_fleet_status`, `schedule_maintenance`, `get_driver_report` |
+| **Email** | Customer Comms | `send_tracking_update`, `auto_reply`, `check_inbox` |
+| **WMS** | Warehouse | `get_dock_schedule`, `assign_pick_task`, `check_inventory`, `receive_shipment` |
+| **Scanner** | Warehouse | `verify_pick`, `receive_item`, `check_sku`, `generate_label` |
+
+### API Endpoints (40+)
+
+| Category | Endpoints |
+|----------|----------|
+| **Auth** | `/api/auth/login`, `/api/auth/register`, `/api/auth/me`, `/api/auth/forgot-password` |
+| **Dashboard** | `/api/dashboard/stats` |
+| **AI** | `/api/ai` (GET + POST — Cloudflare Workers AI) |
+| **Shipments** | `/api/shipment` (CRUD) |
+| **Inventory** | `/api/inventory/[id]` (CRUD) |
+| **Routes** | `/api/routes` (CRUD) |
+| **Warehouse** | `/api/warehouse/[id]` (CRUD) |
+| **Fleet** | `/api/fleet/drivers/[id]`, `/api/fleet/vehicles/[id]` |
+| **Customers** | `/api/customer` (CRUD) |
+| **Integrations** | `/api/integrations` (catalog + connect), `/api/integrations/[id]` (manage) |
+| **Webhooks** | `/api/webhooks/inbound/[id]`, `/api/webhooks/whatsapp/[id]` |
+| **Import/Export** | `/api/import/csv`, `/api/export/csv` |
+| **Evals** | `/api/eval` |
+| **Onboarding** | `/api/onboarding` |
+| **DB** | `/api/db/init` |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 16, React 19, Tailwind CSS v4 |
-| Backend | Python 3.11+, FastAPI, SQLAlchemy, LangGraph |
-| Auth | NextAuth.js v5 (Credentials) |
-| Database | Neon PostgreSQL (Serverless) |
+| Frontend | Next.js 16 (Turbopack), React 19, TypeScript |
+| Styling | Tailwind CSS v4 |
+| Backend | Next.js API Routes (serverless) |
+| Auth | Custom JWT (`jose`) — cookie-based sessions |
+| Database | Neon PostgreSQL (serverless, 35+ tables) |
 | AI | Cloudflare Workers AI (Llama 3 8B) |
-| Agent Tooling | MCP (Model Context Protocol) |
-| Voice | LiveKit Agents |
-| Charts | Recharts |
+| Agent Framework | MCP (Model Context Protocol) |
+| Hosting | Vercel (bom1 region) |
+| Icons | Lucide React |
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js 18+
-- Python 3.11+
 - Neon PostgreSQL database
-- Cloudflare Workers AI account
+- Cloudflare Workers AI account (optional, for AI features)
 
-### Frontend Setup
+### Setup
 
 ```bash
 cd lanework-next
 npm install
 cp .env.example .env.local
-# Edit .env.local with your credentials
+```
+
+Edit `.env.local` with your credentials:
+
+```env
+DATABASE_URL="postgresql://..."
+NEXTAUTH_SECRET="your-secret-key"
+NEXTAUTH_URL="http://localhost:3000"
+CLOUDFLARE_AI_ACCOUNT_ID="..."
+CLOUDFLARE_AI_API_KEY="..."
+```
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-### Backend Setup
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install -r requirements.txt
-
-# Run an individual agent
-cd agents/shipment-tracking
-python main.py  # Starts on port 8000
-
-# Or use docker-compose
-cd backend
-docker-compose up
-```
+Open [http://localhost:3000](http://localhost:3000). Register an account, and the dashboard will guide you through onboarding.
 
 ### Database Setup
 
-```bash
-# Initialize all tables
-npm run db:init
+Visit `/api/db/init` in your browser or run:
 
-# Or directly via Python
-cd backend
-python -c "from packages.db.models import *; # creates tables"
+```bash
+curl http://localhost:3000/api/db/init
 ```
 
-## API Endpoints
+This creates all 35+ tables — users, shipments, inventory, routes, warehouse, fleet, customers, integrations, webhooks, webhook_events, agent_tasks, audit_logs, and more.
 
-### Frontend API (Next.js)
+### Vercel Deployment
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register user |
-| ALL | `/api/auth/[...nextauth]` | NextAuth handler |
-| POST | `/api/ai` | Cloudflare AI |
-| CRUD | `/api/shipment` | Shipment management |
-| CRUD | `/api/inventory` | Inventory management |
-| CRUD | `/api/routes` | Route management |
-| CRUD | `/api/warehouse` | Warehouse tasks |
-| CRUD | `/api/fleet/drivers` | Driver management |
-| CRUD | `/api/fleet/vehicles` | Vehicle management |
-| CRUD | `/api/customer` | Conversations |
-| GET | `/api/dashboard/stats` | Dashboard stats |
+```bash
+# Link project (one-time)
+npx vercel link
 
-### Backend API (Python) — see [agent-api-specifications.md](backend/agent-api-specifications.md)
+# Set environment variables
+npx vercel env add DATABASE_URL production
+npx vercel env add NEXTAUTH_SECRET production
+npx vercel env add NEXTAUTH_URL production
+npx vercel env add CLOUDFLARE_AI_ACCOUNT_ID production
+npx vercel env add CLOUDFLARE_AI_API_KEY production
 
-| Agent | Port | Key Operations |
-|-------|------|----------------|
-| shipment-tracking | 8000 | Create, track, webhook, ETA drift |
-| inventory-management | 8001 | CRUD, transfer, adjust, recommend |
-| route-optimization | 8002 | Create, optimize, assign, re-optimize |
-| warehouse-ops | 8004 | Tasks, dock schedule, labor forecast |
-| fleet-management | 8005 | Drivers, vehicles, HOS, maintenance |
-| customer-support | 8006 | Conversations, replies, escalations, sentiment |
+# Deploy
+npx vercel --prod --yes
+```
 
-## Database Schema
+## Environment Variables
 
-The database has 11 tables in Neon PostgreSQL:
-
-| Table | Purpose |
-|-------|---------|
-| `users` | Auth accounts |
-| `sessions` | Session tokens |
-| `agent_tasks` | Audit trail for all agent actions |
-| `shipments` | Tracking + carrier data |
-| `inventory` | Stock levels + reorder points |
-| `routes` | Route plans + optimizations |
-| `warehouse_tasks` | Pick/pack/ship/receive |
-| `drivers` | Driver profiles + HOS |
-| `vehicles` | Vehicle fleet + maintenance |
-| `conversations` | Customer interactions |
-| `messages` | Chat messages |
+| Key | Required | Description |
+|-----|----------|-------------|
+| `DATABASE_URL` | ✅ | Neon PostgreSQL connection string |
+| `NEXTAUTH_SECRET` | ✅ | JWT signing secret (generate: `openssl rand -hex 32`) |
+| `NEXTAUTH_URL` | ✅ | App URL (`https://lanework.vercel.app` in production) |
+| `CLOUDFLARE_AI_ACCOUNT_ID` | — | Cloudflare Workers AI account |
+| `CLOUDFLARE_AI_API_KEY` | — | Cloudflare Workers AI API key |
+| `SHIPROCKET_EMAIL` | — | Shiprocket login email |
+| `SHIPROCKET_PASSWORD` | — | Shiprocket login password |
+| `TALLY_REST_URL` | — | TallyPrime REST API URL (default: `http://localhost:9000`) |
+| `GSTN_API_KEY` | — | GSTN e-way bill API key |
+| `FLEET_API_KEY` | — | Fleet telematics API key |
+| `MAPMYINDIA_API_KEY` | — | MapmyIndia API key |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | — | Email (Resend) SMTP credentials |
 
 ## Rollback Strategy
 
@@ -173,6 +205,7 @@ The database has 11 tables in Neon PostgreSQL:
 - Incremental commits per module make isolation easy
 - To rollback: `git checkout v0.9.0` or `git revert <commit-hash>`
 - Database schema is additive (no destructive migrations)
+- Vercel: redeploy any previous deployment from the dashboard
 
 ## License
 
