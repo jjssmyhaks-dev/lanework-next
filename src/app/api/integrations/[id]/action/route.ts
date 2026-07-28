@@ -22,17 +22,23 @@ export async function POST(
 
     const sql = neon(process.env.DATABASE_URL!);
 
-    // Find the integration by its integration_type
-    const rows = await sql`SELECT * FROM integrations WHERE integration_type = ${id} OR id = ${id}`;
-    if (rows.length === 0) {
-      return NextResponse.json({ error: "Integration not found" }, { status: 404 });
+    // Find by integration_type first, then by UUID id. Catalog integrations (not yet connected) are allowed.
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let type = id;
+    let config: any = {};
+    if (isUuid) {
+      const rows = await sql`SELECT * FROM integrations WHERE id = ${id}`;
+      if (rows.length === 0) return NextResponse.json({ error: "Integration not found" }, { status: 404 });
+      type = rows[0].integration_type || id;
+      config = rows[0].config || {};
+    } else {
+      // Catalog integration — might not be in DB yet
+      const rows = await sql`SELECT * FROM integrations WHERE integration_type = ${id}`;
+      if (rows.length > 0) config = rows[0].config || {};
     }
 
-    const integration = rows[0];
-    const config = integration.config || {};
-
     // Route actions based on integration type + action
-    const result = await routeAction(integration.integration_type || id, action, config, sql);
+    const result = await routeAction(type, action, config, sql);
 
     return NextResponse.json(result);
   } catch (e: any) {
