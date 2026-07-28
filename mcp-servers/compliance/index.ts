@@ -74,7 +74,8 @@ export class ComplianceMCP extends LaneworkMCPServer {
     }
 
     // Fallback: check from our DB
-    const [driver] = await this.sql`SELECT * FROM drivers WHERE license_number = ${licenseNumber}`;
+    const driverRows = await this.sql`SELECT * FROM drivers WHERE license_number = ${licenseNumber}`;
+    const driver = driverRows[0] as any;
     if (driver) {
       const daysUntilExpiry = driver.license_expiry
         ? Math.ceil((new Date(driver.license_expiry).getTime() - Date.now()) / 86400000)
