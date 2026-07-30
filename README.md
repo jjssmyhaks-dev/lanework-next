@@ -56,8 +56,11 @@ lanework-next/
 │   │   ├── api/                  # 40+ REST API endpoints
 │   │   └── docs/                 # User guide & deployment docs
 │   ├── components/ui/            # Reusable UI components
-│   └── lib/                      # Database, Auth, AI utilities
+│   └── lib/                      # Auth (JWT refresh/blacklist), Rate limit, Sentry, DB
 │
+├── prisma/                       # Prisma schema + migrations (34 tables)
+├── test/                         # Vitest unit + integration tests
+├── .github/workflows/            # CI/CD — lint → build → test → deploy
 ├── mcp-servers/                  # 15 MCP servers (58 tools)
 │   ├── shared/server.ts          # Base class — PostgreSQL, safe API calls, graceful fallback
 │   ├── shiprocket/               # Indian carrier aggregator
@@ -79,6 +82,8 @@ lanework-next/
 ├── docs/                         # User Guide + Deployment Guide
 ├── audit/                        # Production readiness audit report
 ├── .env.example                  # All environment variables documented
+├── vitest.config.ts              # Test framework config (80% coverage threshold)
+├── prisma.config.ts              # Prisma migration settings
 └── package.json
 ```
 
@@ -113,19 +118,37 @@ All MCP servers extend `LaneworkMCPServer` with graceful fallback: when an exter
 | Frontend | Next.js 16 (Turbopack), React 19, TypeScript |
 | Styling | Tailwind CSS v4 |
 | Backend | Next.js API Routes (serverless) |
-| Auth | Custom JWT (`jose`) — cookie-based |
-| Database | Neon PostgreSQL (35+ tables) |
+| Auth | JWT (`jose`) with refresh tokens, token family rotation, blacklist, logout everywhere |
+| Database | Neon PostgreSQL (34 tables) + Prisma ORM + migrations |
 | AI | Cloudflare Workers AI (Llama 3 8B) |
 | Agent Framework | MCP (Model Context Protocol) — 15 servers |
+| Search | PostgreSQL full-text search (`tsvector`/`tsquery`) across shipments, inventory, customers |
+| Testing | Vitest — unit + integration, 80% coverage threshold |
+| CI/CD | GitHub Actions → Vercel (lint → type-check → test → deploy) |
+| Monitoring | Sentry SDK — error capture, source maps, alerting |
+| Security | Per-route rate limiting (10–30 req/min), token blacklist, theft detection |
 | Hosting | Vercel |
 | Icons | Lucide React |
+
+## Key Systems (Production Hardening)
+
+| System | Purpose | Files |
+|--------|----------|-------|
+| **Rate Limiting** | `/api/ai` 10/min, `/api/integrations` 30/min, 429 responses | [src/lib/rate-limit.ts](src/lib/rate-limit.ts) |
+| **CI/CD** | GitHub Actions: lint → type-check → test → deploy to Vercel on push | [.github/workflows/ci.yml](.github/workflows/ci.yml) |
+| **Sentry** | Error monitoring, source maps, production smoke test endpoint | [src/lib/sentry.ts](src/lib/sentry.ts) · [src/instrumentation.ts](src/instrumentation.ts) |
+| **Live Agent Pages** | 6 pages fetch real-time tasks from DB (30s refresh, loading/empty/error) | [AgentLiveActivity](src/components/ui/agent-live-activity.tsx) |
+| **Test Suite** | Vitest with 80% coverage threshold (unit + integration smoke tests) | [vitest.config.ts](vitest.config.ts) · [test/](test/) |
+| **Prisma Migrations** | Full schema (34 tables), migration script, version-tracked | [prisma/schema.prisma](prisma/schema.prisma) · [scripts/db-migrate.ts](scripts/db-migrate.ts) |
+| **Session Management** | Refresh tokens, token family theft detection, blacklist, logout all | [src/lib/auth.ts](src/lib/auth.ts) · `/api/auth/refresh` · `/api/auth/sessions` |
+| **Full-Text Search** | PostgreSQL `tsvector` + `tsquery`, prefix matching, `⌘K` UI | [src/app/api/search/route.ts](src/app/api/search/route.ts) · [GlobalSearch](src/components/ui/global-search.tsx) |
 
 ## Documentation
 
 | Document | Audience | Content |
 |----------|----------|---------|
 | [User Guide](docs/USER-GUIDE.md) | Non-technical users | Step-by-step: sign up, connect tools, common tasks, troubleshooting |
-| [Deployment Guide](docs/DEPLOYMENT.md) | Operators / DevOps | Vercel deploy, env vars, health checks, rollback, monitoring |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Operators / DevOps | Vercel deploy, env vars, health checks, rollback, monitoring, CI/CD, Sentry, rate-limit tuning |
 | [Audit Report](audit/production-readiness.md) | Developers | Hardcoded values found, broken features fixed, MCP status |
 | [.env.example](.env.example) | Everyone | All 50+ environment variables with descriptions |
 
