@@ -115,12 +115,14 @@ export async function POST(request: Request) {
             i.id,
             i.sku,
             i.name,
-            i.category,
+            i.warehouse,
+            i.location,
             ts_rank(
               to_tsvector('english',
                 COALESCE(i.sku, '') || ' ' ||
                 COALESCE(i.name, '') || ' ' ||
-                COALESCE(i.category, '')
+                COALESCE(i.warehouse, '') || ' ' ||
+                COALESCE(i.location, '')
               ),
               to_tsquery('english', ${tsQuery})
             ) AS relevance
@@ -129,7 +131,8 @@ export async function POST(request: Request) {
             to_tsvector('english',
               COALESCE(i.sku, '') || ' ' ||
               COALESCE(i.name, '') || ' ' ||
-              COALESCE(i.category, '')
+              COALESCE(i.warehouse, '') || ' ' ||
+              COALESCE(i.location, '')
             ) @@ to_tsquery('english', ${tsQuery})
           ORDER BY relevance DESC
           LIMIT ${MAX_RESULTS}
@@ -138,7 +141,7 @@ export async function POST(request: Request) {
             type: "inventory" as SearchType,
             id: r.id,
             title: r.name,
-            description: `SKU: ${r.sku}${r.category ? ` · ${r.category}` : ""}`,
+            description: `SKU: ${r.sku}${r.warehouse ? ` · ${r.warehouse}` : ""}${r.location ? ` · ${r.location}` : ""}`,
             href: `/inventory`,
             relevance: Number(r.relevance),
           }))
@@ -188,7 +191,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const allResults = (await Promise.all(promises)).flat();
+    const settledResults = await Promise.allSettled(promises);
+    const allResults: SearchResult[] = [];
+    const errors: string[] = [];
+    for (const r of settledResults) {
+      if (r.status === "fulfilled") {
+        allResults.push(...r.value);
+      } else {
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        console.error("Search sub-query failed:", msg);
+        errors.push(msg);
+      }
+    }
 
     // ── Rank across all types, limit to MAX_RESULTS ───────────────────────
     const ranked = allResults
