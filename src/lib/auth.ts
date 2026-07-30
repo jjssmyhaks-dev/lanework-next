@@ -2,13 +2,11 @@ import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 
-const SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "lanework-build-fallback"
-);
-
-if (!process.env.NEXTAUTH_SECRET && !process.env.JWT_SECRET) {
-  console.warn("[AUTH] JWT secret not configured. Set NEXTAUTH_SECRET in Vercel dashboard.");
+const SECRET_KEY = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET;
+if (!SECRET_KEY) {
+  throw new Error("NEXTAUTH_SECRET or JWT_SECRET environment variable is required. Generate one: openssl rand -hex 32");
 }
+const SECRET = new TextEncoder().encode(SECRET_KEY);
 
 export type SessionUser = {
   id: string;
