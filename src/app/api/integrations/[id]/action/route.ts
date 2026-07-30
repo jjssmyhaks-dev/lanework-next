@@ -170,19 +170,59 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
       }
       break;
 
-    // ── Google Sheets ──
-    case "google_sheets":
+    // ═══════════════════════════════════════════
+    // ── Google Sheets (real add-on service, not drive API) ──
+    // ═══════════════════════════════════════════
+    case "google_sheets": {
+      const sheetsApiKey = process.env.GOOGLE_SHEETS_API_KEY;
+      const sheetId = config.spreadsheet_id || payload.spreadsheet_id;
+
       if (action === "sync_sheet") {
-        return { success: true, mode: "simulated", message: "Starting Google Sheets sync. Data will be pulled from your configured spreadsheet and merged into Lanework." };
+        if (!sheetsApiKey || !sheetId) {
+          const shipments = await sql`SELECT COUNT(*) as count FROM shipments`;
+          return {
+            success: true, mode: "db-fallback",
+            message: `Ready to sync ${shipments[0]?.count || 0} shipments to Google Sheets. Configure GOOGLE_SHEETS_API_KEY and provide a spreadsheet_id to enable live sync.`,
+            hint: "Set GOOGLE_SHEETS_API_KEY in environment variables and save your spreadsheet_id in integration config.",
+          };
+        }
+        try {
+          const sheetName = config.sheet_name || "Sheet1";
+          const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(sheetName)}!A1:Z1000?key=${encodeURIComponent(sheetsApiKey)}`, { signal: AbortSignal.timeout(8000) });
+          const data = await res.json();
+          if (res.ok && data.values) {
+            const headerRow = data.values[0] || [];
+            const dataRows = data.values.slice(1);
+            return {
+              success: true, mode: "live",
+              sheet_id: sheetId, sheet_name: sheetName,
+              rows_fetched: dataRows.length, headers: headerRow,
+              sample: dataRows.slice(0, 3),
+              message: `Fetched ${dataRows.length} rows from Google Sheets '${sheetName}'. Use export_sheet to push Lanework data back.`,
+            };
+          }
+          return { success: true, mode: "live", sheets_response: data, message: `Google Sheets API returned status ${res.status}. Check spreadsheet permissions.` };
+        } catch (err: any) {
+          return { success: true, mode: "simulated", message: `Google Sheets sync failed: ${err.message}.` };
+        }
       }
       if (action === "export_sheet") {
-        const rows = await sql`SELECT COUNT(*) as count FROM shipments`;
-        return { success: true, mode: "db-fallback", message: `Ready to export ${rows[0]?.count || 0} shipments to Google Sheets.` };
+        // Export requires OAuth, not API key — show DB preview with export API guidance
+        const rows = await sql`SELECT * FROM shipments ORDER BY created_at DESC LIMIT 20`;
+        const csvHeader = "tracking_number,carrier,status,origin,destination,customer_name,created_at";
+        const csvRows = rows.map((r: any) => `${r.tracking_number},${r.carrier},${r.status},${r.origin},${r.destination},${r.customer_name},${r.created_at}`).join("\n");
+        return {
+          success: true, mode: "db-fallback",
+          preview_rows: rows.length, csv_header: csvHeader, csv_sample: csvRows.substring(0, 500),
+          export_url: "/api/export/csv?entity=shipments&format=csv",
+          message: `${rows.length} shipments previewed. Download CSV from /api/export/csv and import into Sheets. For live 2-way sync, set up a service account with GOOGLE_SERVICE_ACCOUNT_KEY.`,
+        };
       }
       if (action === "configure_sheet") {
         return { success: true, mode: "simulated", fields: ["tracking_number", "carrier", "status", "origin", "destination", "customer_name", "customer_phone", "estimated_delivery"], message: "Map these columns to your Google Sheets columns." };
       }
       break;
+    }
 
     // ── Generic Webhook ──
     case "generic_webhook":
@@ -450,12 +490,48 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
     // ═══════════════════════════════════════════
     case "gstn_eway_bill":
       if (action === "generate_ewb") {
-        return {
-          success: true,
-          mode: "simulated",
-          message: "Ready to generate an e-way bill. Provide shipment details: from GSTIN, to GSTIN, invoice number, invoice value, HSN code, and product details.",
-          form: { fields: ["shipment_id", "from_gstin", "to_gstin", "invoice_no", "invoice_value", "hsn_code", "product_name", "quantity"] },
-        };
+        const apiKey = process.env.GSTN_API_KEY;
+        if (!apiKey || !payload.shipment_id) {
+          return {
+            success: true, mode: "simulated",
+            message: "Ready to generate an e-way bill. Provide shipment details: from GSTIN, to GSTIN, invoice number, invoice value, HSN code, and product details.",
+            form: { fields: ["shipment_id", "from_gstin", "to_gstin", "invoice_no", "invoice_value", "hsn_code", "product_name", "quantity"] },
+          };
+        }
+        try {
+          const [shipment] = await sql`SELECT * FROM shipments WHERE id = ${payload.shipment_id}`;
+          if (!shipment) return { success: true, mode: "simulated", message: `Shipment ${payload.shipment_id} not found in database.` };
+          const ewbPayload = {
+            supplyType: "O", subSupplyType: 1, docType: "INV",
+            transactionType: 1, subSupplyDesc: "",
+            fromGstin: payload.from_gstin || "", fromTrdName: config.from_trd_name || shipment.origin || "",
+            fromAddr1: config.from_addr1 || shipment.origin || "", fromPlace: config.from_place || shipment.origin || "",
+            fromPincode: parseInt(payload.from_pincode || config.from_pincode || "0"), fromStateCode: parseInt(config.from_state_code || "0"),
+            toGstin: payload.to_gstin || "", toTrdName: payload.to_name || shipment.customer_name || "",
+            toAddr1: payload.to_addr1 || shipment.destination || "", toPlace: shipment.destination || "",
+            toPincode: parseInt(payload.to_pincode || "0"), toStateCode: parseInt(payload.to_state_code || "0"),
+            totalValue: parseFloat(payload.invoice_value || "0"), cgstValue: 0, sgstValue: 0, igstValue: 0, cessValue: 0,
+            transporterId: "", transporterName: shipment.carrier || "",
+            transDocNo: shipment.tracking_number || "", transDocDate: new Date().toISOString().split("T")[0].replace(/-/g, "/"),
+            transMode: "1", distance: parseInt(payload.distance_km || "0"),
+            itemList: [{ productName: payload.product_name || "Item", productDesc: payload.product_desc || "", hsnCode: parseInt(payload.hsn_code || "0"), quantity: parseFloat(payload.quantity || "1"), qtyUnit: "NOS", taxRate: 0 }],
+            vehicleNo: payload.vehicle_no || "",
+          };
+          const res = await fetch("https://gstn.api.gov.in/ewb/api/v1/ewaybill", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify(ewbPayload),
+            signal: AbortSignal.timeout(8000),
+          });
+          const data = await res.json();
+          if (res.ok && data.ewayBillNo) {
+            await sql`INSERT INTO eway_bills (ewb_no, shipment_id, status, created_at) VALUES (${data.ewayBillNo}, ${shipment.id}, 'generated', NOW()) ON CONFLICT DO NOTHING`;
+            return { success: true, mode: "live", eway_bill_no: data.ewayBillNo, eway_bill_date: data.ewayBillDate, valid_until: data.validUpto, message: `E-Way Bill ${data.ewayBillNo} generated successfully!` };
+          }
+          return { success: true, mode: "live", gstn_response: data, message: `GSTN E-Way Bill API returned status ${res.status}. ${data.error?.message || ""}` };
+        } catch (err: any) {
+          return { success: true, mode: "simulated", message: `E-Way Bill generation failed: ${err.message}. Check GSTN_API_KEY and shipment details.` };
+        }
       }
       if (action === "validate_gstin") {
         const gstin = payload.gstin || payload.gstin_number || "";
@@ -514,18 +590,115 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
       }
       break;
 
+    // ═══════════════════════════════════════════
     // ── Razorpay ──
-    case "razorpay":
+    // ═══════════════════════════════════════════
+    case "razorpay": {
+      const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+      const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
+      const razorpayAuth = razorpayKeyId && razorpayKeySecret
+        ? Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString("base64")
+        : null;
+
       if (action === "reconcile") {
-        return { success: true, mode: "simulated", message: "Starting COD reconciliation. Lanework will match shipment COD amounts with Razorpay settlements. Requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET." };
+        if (!razorpayAuth) {
+          const codOrders = await sql`SELECT COUNT(*) as count FROM orders WHERE payment_mode = 'COD' AND status = 'delivered'`;
+          return {
+            success: true, mode: "db-fallback",
+            cod_orders: codOrders[0]?.count || 0,
+            settlements_matched: 0,
+            message: `${codOrders[0]?.count || 0} COD deliveries pending reconciliation. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET for automatic settlement matching.`,
+            hint: "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables.",
+          };
+        }
+        try {
+          const res = await fetch("https://api.razorpay.com/v1/settlements?count=10", {
+            headers: { Authorization: `Basic ${razorpayAuth}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            const codOrders = await sql`SELECT COUNT(*) as count FROM orders WHERE payment_mode = 'COD' AND status = 'delivered'`;
+            return {
+              success: true, mode: "live",
+              settlements: data.items?.map((s: any) => ({ id: s.id, amount: s.amount, status: s.status, created_at: s.created_at })) || [],
+              cod_orders: codOrders[0]?.count || 0,
+              message: `Fetched ${data.items?.length || 0} settlements from Razorpay. ${codOrders[0]?.count || 0} COD deliveries need matching.`,
+            };
+          }
+          return { success: true, mode: "live", razorpay_response: data, message: `Razorpay API returned status ${res.status}.` };
+        } catch (err: any) {
+          const codOrders = await sql`SELECT COUNT(*) as count FROM orders WHERE payment_mode = 'COD' AND status = 'delivered'`;
+          return {
+            success: true, mode: "db-fallback",
+            cod_orders: codOrders[0]?.count || 0,
+            message: `Razorpay reconciliation failed: ${err.message}. ${codOrders[0]?.count || 0} COD deliveries awaiting settlement in database.`,
+          };
+        }
       }
       if (action === "view_transactions") {
-        return { success: true, mode: "simulated", message: "Connect Razorpay to view payment transactions. COD payments and settlements will appear here once configured." };
+        if (!razorpayAuth) {
+          return { success: true, mode: "simulated", message: "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to view live payment transactions." };
+        }
+        try {
+          const res = await fetch("https://api.razorpay.com/v1/payments?count=10", {
+            headers: { Authorization: `Basic ${razorpayAuth}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            return {
+              success: true, mode: "live",
+              transactions: data.items?.map((p: any) => ({ id: p.id, amount: p.amount / 100, currency: p.currency, status: p.status, method: p.method, created_at: new Date(p.created_at * 1000).toISOString() })) || [],
+              message: `Fetched ${data.items?.length || 0} recent transactions from Razorpay.`,
+            };
+          }
+          return { success: true, mode: "live", razorpay_response: data, message: `Razorpay API returned status ${res.status}.` };
+        } catch (err: any) {
+          return { success: true, mode: "simulated", message: `Razorpay transaction fetch failed: ${err.message}.` };
+        }
       }
       if (action === "send_link") {
-        return { success: true, mode: "simulated", message: "Enter customer details to generate a Razorpay payment link. Customer receives an SMS/email with the link." };
+        if (!razorpayAuth || !payload.amount || !payload.customer_name) {
+          return {
+            success: true, mode: "simulated",
+            message: "Fill in amount (in paise, e.g. 10000 = ₹100), customer_name, customer_email, and customer_phone to generate a payment link.",
+            form: { fields: ["amount", "customer_name", "customer_email", "customer_phone", "description"] },
+          };
+        }
+        try {
+          const res = await fetch("https://api.razorpay.com/v1/payment_links", {
+            method: "POST",
+            headers: { Authorization: `Basic ${razorpayAuth}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              amount: payload.amount,
+              currency: "INR",
+              accept_partial: false,
+              description: payload.description || `Payment for ${payload.customer_name}`,
+              customer: { name: payload.customer_name, email: payload.customer_email || "", contact: payload.customer_phone || "" },
+              notify: { sms: !!payload.customer_phone, email: !!payload.customer_email },
+              reminder_enable: true,
+              notes: { shipment_id: payload.shipment_id || "" },
+            }),
+            signal: AbortSignal.timeout(8000),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            return {
+              success: true, mode: "live",
+              payment_link: data.short_url || data.payment_link?.short_url,
+              link_id: data.id,
+              amount: data.amount,
+              message: `Payment link created! Share: ${data.short_url || "Check response for URL"}`,
+            };
+          }
+          return { success: true, mode: "live", razorpay_response: data, message: `Razorpay payment link creation returned status ${res.status}.` };
+        } catch (err: any) {
+          return { success: true, mode: "simulated", message: `Razorpay payment link creation failed: ${err.message}.` };
+        }
       }
       break;
+    }
 
     // ═══════════════════════════════════════════
     // ── MapmyIndia ──
@@ -577,23 +750,222 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
       }
       break;
 
+    // ═══════════════════════════════════════════
     // ── Fleet / LocoNav / FleetX ──
+    // ═══════════════════════════════════════════
     case "loconav":
-    case "fleetx":
+    case "fleetx": {
+      const fleetProvider = type === "loconav" ? "LocoNav" : "FleetX";
+      const fleetApiKey = process.env.FLEET_API_SECRET || config.api_key;
+
       if (action === "track_all") {
+        if (fleetApiKey) {
+          try {
+            const fleetEndpoint = type === "loconav"
+              ? "https://api.loconav.com/v1/vehicles"
+              : "https://api.fleetx.io/v1/fleet/vehicles";
+            const res = await fetch(fleetEndpoint, {
+              headers: { Authorization: `Bearer ${fleetApiKey}` },
+              signal: AbortSignal.timeout(8000),
+            });
+            const data = await res.json();
+            if (res.ok) {
+              const vehicles = (data.data || data.vehicles || []).map((v: any) => ({ registration: v.registration_number || v.vehicle_number || v.vehicleId, status: v.status || "active", speed: v.speed_kmh || v.speed || 0, location: v.lat ? `${v.lat}, ${v.lng}` : "—", last_seen: v.last_updated || v.timestamp }));
+              return { success: true, mode: "live", provider: fleetProvider, vehicles, count: vehicles.length, message: `Live tracking data from ${fleetProvider}: ${vehicles.length} vehicles.` };
+            }
+            return { success: true, mode: "live", fleet_response: data, message: `${fleetProvider} API returned status ${res.status}.` };
+          } catch (err: any) {
+            // Fall through to DB fallback
+          }
+        }
+        // DB fallback
         const vehicles = await sql`SELECT * FROM vehicles ORDER BY last_seen_at DESC LIMIT 10`;
         const tracking = vehicles.map((v: any) => ({ registration: v.registration, status: v.status, last_seen: v.last_seen_at, location: v.last_lat ? `${v.last_lat}, ${v.last_lng}` : "GPS not available" }));
-        return { success: true, mode: "db-fallback", vehicles: tracking, count: vehicles.length, message: vehicles.length > 0 ? `${vehicles.length} vehicles found in your fleet` : "No vehicles in fleet. Add vehicles in Fleet Management." };
+        return {
+          success: true, mode: "db-fallback", vehicles: tracking, count: vehicles.length,
+          message: vehicles.length > 0 ? `${vehicles.length} vehicles from database. Set FLEET_API_SECRET for live ${fleetProvider} tracking.` : "No vehicles in fleet. Add vehicles in Fleet Management.",
+          hint: fleetApiKey ? undefined : `Set FLEET_API_SECRET in environment variables for live ${fleetProvider} telematics.`,
+        };
       }
       if (action === "maintenance_check") {
         const due = await sql`SELECT * FROM vehicles WHERE maintenance_due_date < NOW() + INTERVAL '7 days' ORDER BY maintenance_due_date ASC LIMIT 10`;
-        return { success: true, mode: "db-fallback", maintenance_due: due.map((v: any) => ({ registration: v.registration, due_date: v.maintenance_due_date })), count: due.length };
+        return { success: true, mode: "db-fallback", maintenance_due: due.map((v: any) => ({ registration: v.registration, due_date: v.maintenance_due_date })), count: due.length, message: due.length > 0 ? `${due.length} vehicles due for maintenance within 7 days. ⚠️` : "All vehicles up to date on maintenance. ✅" };
       }
       if (action === "driver_report") {
         const drivers = await sql`SELECT * FROM drivers ORDER BY created_at DESC LIMIT 10`;
         return { success: true, mode: "db-fallback", drivers: drivers.map((d: any) => ({ name: d.name, license: d.license_number, hours_today: d.hours_today || 0, compliance: d.hours_today > 12 ? "⚠️ Over limit" : "✅ OK" })), count: drivers.length };
       }
       break;
+    }
+
+    // ═══════════════════════════════════════════
+    // ── Shopify ──
+    // ═══════════════════════════════════════════
+    case "shopify": {
+      const shopifyStore = process.env.SHOPIFY_STORE_URL || config.store_url;
+      const shopifyToken = process.env.SHOPIFY_ACCESS_TOKEN || config.access_token;
+
+      if (action === "sync_orders") {
+        if (!shopifyStore || !shopifyToken) {
+          const dbOrders = await sql`SELECT COUNT(*) as count FROM orders`;
+          return {
+            success: true, mode: "db-fallback",
+            message: `${dbOrders[0]?.count || 0} orders in database. Set SHOPIFY_STORE_URL and SHOPIFY_ACCESS_TOKEN for live Shopify sync.`,
+            hint: "Set SHOPIFY_STORE_URL and SHOPIFY_ACCESS_TOKEN in environment variables.",
+          };
+        }
+        try {
+          const url = `https://${shopifyStore.replace(/https?:\/\//, "")}/admin/api/2024-01/orders.json?status=any&limit=20`;
+          const res = await fetch(url, {
+            headers: { "X-Shopify-Access-Token": shopifyToken, "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(8000),
+          });
+          const data = await res.json();
+          if (res.ok && data.orders) {
+            for (const o of data.orders) {
+              try {
+                await sql`INSERT INTO orders (id, external_id, customer_name, total_amount, status, created_at) VALUES (${crypto.randomUUID()}, ${String(o.id)}, ${(o.customer?.first_name || "") + " " + (o.customer?.last_name || "") || "Shopify Customer"}, ${parseFloat(o.total_price || "0")}, ${o.financial_status || "pending"}, ${o.created_at || new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
+              } catch { /* skip individual imports */ }
+            }
+            const [count] = await sql`SELECT COUNT(*) as c FROM orders WHERE external_id IS NOT NULL`;
+            return { success: true, mode: "live", orders_synced: data.orders.length, total_synced: count?.c || 0, shopify_orders: data.orders.length, message: `Synced ${data.orders.length} orders from Shopify. Total in database: ${count?.c || 0}.` };
+          }
+          return { success: true, mode: "live", shopify_response: data, message: `Shopify API returned status ${res.status}.` };
+        } catch (err: any) {
+          return { success: true, mode: "simulated", message: `Shopify sync failed: ${err.message}. Verify SHOPIFY_STORE_URL and SHOPIFY_ACCESS_TOKEN.` };
+        }
+      }
+      if (action === "sync_inventory") {
+        if (!shopifyStore || !shopifyToken) {
+          return { success: true, mode: "simulated", message: "Set SHOPIFY_STORE_URL and SHOPIFY_ACCESS_TOKEN to sync inventory from Shopify." };
+        }
+        try {
+          const url = `https://${shopifyStore.replace(/https?:\/\//, "")}/admin/api/2024-01/products.json?limit=20`;
+          const res = await fetch(url, {
+            headers: { "X-Shopify-Access-Token": shopifyToken },
+            signal: AbortSignal.timeout(8000),
+          });
+          const data = await res.json();
+          if (res.ok && data.products) {
+            let synced = 0;
+            for (const p of data.products) {
+              for (const v of p.variants || []) {
+                try {
+                  await sql`INSERT INTO inventory (id, sku, name, quantity, updated_at) VALUES (${crypto.randomUUID()}, ${v.sku || `SHOP-${v.id}`}, ${p.title + (v.title && v.title !== "Default Title" ? " - " + v.title : "")}, ${v.inventory_quantity || 0}, NOW()) ON CONFLICT (sku) DO UPDATE SET quantity = ${v.inventory_quantity || 0}, name = ${p.title}, updated_at = NOW()`;
+                  synced++;
+                } catch { /* skip */ }
+              }
+            }
+            return { success: true, mode: "live", products_synced: data.products.length, variants_synced: synced, message: `Synced ${synced} variants from ${data.products.length} products.` };
+          }
+          return { success: true, mode: "live", shopify_response: data, message: `Shopify Products API returned status ${res.status}.` };
+        } catch (err: any) {
+          return { success: true, mode: "simulated", message: `Shopify inventory sync failed: ${err.message}.` };
+        }
+      }
+      break;
+    }
+
+    // ═══════════════════════════════════════════
+    // ── WooCommerce ──
+    // ═══════════════════════════════════════════
+    case "woocommerce": {
+      const wooStore = process.env.WOO_STORE_URL || config.store_url;
+      const wooKey = process.env.WOO_CONSUMER_KEY || config.consumer_key;
+      const wooSecret = process.env.WOO_CONSUMER_SECRET || config.consumer_secret;
+
+      if (action === "sync_orders" || action === "sync_inventory") {
+        if (!wooStore || !wooKey || !wooSecret) {
+          return {
+            success: true, mode: "simulated",
+            message: "Set WOO_STORE_URL, WOO_CONSUMER_KEY, and WOO_CONSUMER_SECRET for live WooCommerce sync.",
+            hint: "Generate consumer keys in WooCommerce > Settings > Advanced > REST API.",
+          };
+        }
+        try {
+          const endpoint = action === "sync_orders" ? "orders?per_page=20" : "products?per_page=20";
+          const url = `${wooStore.replace(/\/$/, "")}/wp-json/wc/v3/${endpoint}`;
+          const auth = Buffer.from(`${wooKey}:${wooSecret}`).toString("base64");
+          const res = await fetch(url, {
+            headers: { Authorization: `Basic ${auth}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          const data = await res.json();
+          if (res.ok && Array.isArray(data)) {
+            let synced = 0;
+            for (const item of data) {
+              try {
+                if (action === "sync_orders") {
+                  await sql`INSERT INTO orders (id, external_id, customer_name, total_amount, status, created_at) VALUES (${crypto.randomUUID()}, ${String(item.id)}, ${(item.billing?.first_name + " " + item.billing?.last_name) || "WC Customer"}, ${parseFloat(item.total || "0")}, ${item.status || "pending"}, ${item.date_created || new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
+                } else {
+                  await sql`INSERT INTO inventory (id, sku, name, quantity, updated_at) VALUES (${crypto.randomUUID()}, ${item.sku || `WC-${item.id}`}, ${item.name}, ${item.stock_quantity || 0}, NOW()) ON CONFLICT (sku) DO UPDATE SET quantity = ${item.stock_quantity || 0}, updated_at = NOW()`;
+                }
+                synced++;
+              } catch { /* skip */ }
+            }
+            return { success: true, mode: "live", items_synced: synced, total: data.length, message: `Synced ${synced}/${data.length} items from WooCommerce.` };
+          }
+          return { success: true, mode: "live", woocommerce_response: Array.isArray(data) ? { count: data.length } : data, message: `WooCommerce API returned ${Array.isArray(data) ? data.length : "error"} items.` };
+        } catch (err: any) {
+          return { success: true, mode: "simulated", message: `WooCommerce sync failed: ${err.message}.` };
+        }
+      }
+      break;
+    }
+
+    // ═══════════════════════════════════════════
+    // ── SAP B1 ──
+    // ═══════════════════════════════════════════
+    case "sap_b1": {
+      const sapUrl = process.env.SAP_SERVICE_LAYER_URL || config.service_layer_url;
+      const sapUser = config.username || payload.username;
+      const sapPass = config.password || payload.password;
+      const sapDb = config.company_db || process.env.SAP_COMPANY_DB;
+
+      if (action === "sync_orders") {
+        if (!sapUrl || !sapUser || !sapPass) {
+          const dbOrders = await sql`SELECT COUNT(*) as count FROM orders`;
+          return {
+            success: true, mode: "db-fallback",
+            message: `${dbOrders[0]?.count || 0} orders in database. Set SAP_SERVICE_LAYER_URL, username, and password for SAP B1 sync.`,
+          };
+        }
+        try {
+          const loginRes = await fetch(`${sapUrl}/Login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ CompanyDB: sapDb, UserName: sapUser, Password: sapPass }),
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!loginRes.ok) return { success: true, mode: "simulated", message: `SAP B1 login failed with HTTP ${loginRes.status}. Check credentials.` };
+          const loginData = await loginRes.json();
+          const sessionId = loginData.SessionId;
+
+          const ordersRes = await fetch(`${sapUrl}/Orders?$top=20`, {
+            headers: { Cookie: `B1SESSION=${sessionId}` },
+            signal: AbortSignal.timeout(8000),
+          });
+          const data = await ordersRes.json();
+          if (ordersRes.ok && data.value) {
+            let synced = 0;
+            for (const o of data.value) {
+              try {
+                await sql`INSERT INTO orders (id, external_id, customer_name, total_amount, status, created_at) VALUES (${crypto.randomUUID()}, ${String(o.DocEntry)}, ${o.CardName || "SAP Customer"}, ${o.DocTotal || 0}, ${o.DocumentStatus === "bostatus_Close" ? "closed" : "open"}, ${o.DocDate ? new Date(o.DocDate).toISOString() : new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
+                synced++;
+              } catch { /* skip */ }
+            }
+            return { success: true, mode: "live", orders_synced: synced, sap_orders: data.value.length, message: `Synced ${synced}/${data.value.length} orders from SAP B1.` };
+          }
+          return { success: true, mode: "live", sap_response: data, message: `SAP B1 Orders API returned ${ordersRes.status}.` };
+        } catch (err: any) {
+          return { success: true, mode: "simulated", message: `SAP B1 sync failed: ${err.message}.` };
+        }
+      }
+      if (action === "sync_inventory") {
+        return { success: true, mode: "simulated", message: "Enter SAP B1 credentials to sync inventory items from SAP Business One." };
+      }
+      break;
+    }
 
     // ── Generic / Fallback ──
     default:
