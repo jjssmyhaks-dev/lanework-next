@@ -5,7 +5,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ArrowRight, Truck, Package, Route as RouteIcon, Warehouse, Users, MessageSquare,
   Plug, Sliders, Play, ShieldCheck, Code2, Minus, Plus, Wifi, ChevronDown,
-  BookOpen, FileText, LifeBuoy, ExternalLink, Cpu, Bot, CreditCard, HelpCircle, Globe
+  BookOpen, FileText, LifeBuoy, ExternalLink, Cpu, Bot, CreditCard, HelpCircle, Globe,
+  Loader2, Send
 } from "lucide-react";
 
 /* ===== Logo ===== */
@@ -654,19 +655,57 @@ function Interfaces() {
 
 function LiveDashboard() {
   const [mounted, setMounted] = useState(false);
+  const [stats, setStats] = useState<{ shipments: number | null; tasks: number | null; exceptions: number | null }>({ shipments: null, tasks: null, exceptions: null });
   const [activeIdx, setActiveIdx] = useState(0);
-  const rows = [
+  const [recentTasks, setRecentTasks] = useState<any[]>([]);
+
+  useEffect(() => {
+    setMounted(true);
+    const fetchData = async () => {
+      try {
+        const res = await fetch("/api/dashboard/stats", { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          setStats({ shipments: data.shipments ?? 0, tasks: data.tasks ?? 0, exceptions: data.exceptions ?? 0 });
+        }
+        // Fetch recent agent tasks for live feed
+        const taskRes = await fetch("/api/ai", { signal: AbortSignal.timeout(5000) });
+        if (taskRes.ok) {
+          const taskData = await taskRes.json();
+          if (Array.isArray(taskData) && taskData.length > 0) setRecentTasks(taskData);
+        }
+      } catch { /* API unavailable — show static indicators */ }
+    };
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const hasLiveData = recentTasks.length > 0;
+  const rows = hasLiveData ? recentTasks.slice(0, 4).map((t: any) => ({
+    agent: t.agent || t.agent_type || "Agent",
+    msg: t.reasoning || t.action_type || t.action || "Task executed",
+    dot: t.status === "rejected" ? "bg-red-400" : t.status === "completed" ? "bg-emerald-400" : "bg-amber-400",
+    tag: t.status || "Done",
+    tagColor: t.status === "rejected" ? "bg-red-100 text-red-700" : t.status === "completed" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700",
+  })) : [
     { agent: "Route Optimization", msg: "Reroute 3 shipments · I-80 closure", dot: "bg-amber-400", tag: "Needs approval", tagColor: "bg-amber-100 text-amber-700" },
     { agent: "Inventory", msg: "SKU-4821 reorder point hit at DC-West", dot: "bg-sky-400", tag: "Auto", tagColor: "bg-sky-100 text-sky-700" },
     { agent: "Shipment Tracking", msg: "SHP-482913 delay predicted · +47 min", dot: "bg-amber-400", tag: "Alert", tagColor: "bg-amber-100 text-amber-700" },
     { agent: "Customer Comms", msg: "Replied to 14 'where is my order' asks", dot: "bg-emerald-400", tag: "Done", tagColor: "bg-emerald-100 text-emerald-700" },
   ];
 
+  const statCards = [
+    { k: "Active shipments", v: stats.shipments !== null ? stats.shipments.toLocaleString() : "—" },
+    { k: "Agent tasks", v: stats.tasks !== null ? stats.tasks.toLocaleString() : "—" },
+    { k: "Exceptions", v: stats.exceptions !== null ? stats.exceptions.toLocaleString() : "—" },
+  ];
+
   useEffect(() => {
-    setMounted(true);
+    if (!mounted) return;
     const interval = setInterval(() => setActiveIdx(i => (i + 1) % rows.length), 2500);
     return () => clearInterval(interval);
-  }, []);
+  }, [rows.length, mounted]);
 
   return (
     <div className="rounded-3xl border border-[#e5e7eb] p-10" style={{ background: "linear-gradient(180deg, #fafafa 0%, #ffffff 100%)" }}>
@@ -688,9 +727,9 @@ function LiveDashboard() {
           </div>
         </div>
         <div className="grid grid-cols-3 gap-px bg-[#e5e7eb]">
-          {[{ k: "Active shipments", v: "1,284" }, { k: "Pending approvals", v: "7" }, { k: "Exceptions", v: "3" }].map((s) => (
+          {statCards.map((s) => (
             <div key={s.k} className="bg-white p-3">
-              <div className="font-serif text-xl text-[#1a1a2e]" suppressHydrationWarning>{s.v}</div>
+              <div className={`font-serif text-xl text-[#1a1a2e] ${stats.shipments === null ? "animate-pulse" : ""}`} suppressHydrationWarning>{s.v}</div>
               <div className="text-[10px] text-[#1a1a2e]/50">{s.k}</div>
             </div>
           ))}
@@ -714,33 +753,51 @@ function LiveDashboard() {
 
 function LiveChat() {
   const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(0);
-  const msgs = [
+  const [messages, setMessages] = useState<{ role: string; text: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [messages]);
+
+  const handleSend = async () => {
+    const text = input.trim(); if (!text || loading) return;
+    setMessages(prev => [...prev, { role: "user", text }]);
+    setInput(""); setLoading(true);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reasoning", data: { agentId: "copilot", taskType: "chat", context: { query: text } } }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => [...prev, { role: "bot", text: data.result || "I processed your request." }]);
+      } else {
+        setMessages(prev => [...prev, { role: "bot", text: "I'm having trouble connecting. Try again in a moment." }]);
+      }
+    } catch {
+      setMessages(prev => [...prev, { role: "bot", text: "I'm offline right now. Connect to the AI service to chat with me." }]);
+    }
+    setLoading(false);
+  };
+
+  const displayMsgs = messages.length > 0 ? messages : [
     { role: "user", text: "Where is order 4521?" },
     { role: "bot", text: "Out for delivery — ETA 3:42 PM. Currently 4 stops away in Oakland." },
     { role: "user", text: "Any risk of delay?" },
     { role: "bot", text: "Low risk. Traffic is clear on the remaining route. No weather alerts." },
   ];
 
-  useEffect(() => {
-    setMounted(true);
-    if (!mounted) return;
-    if (visible >= msgs.length) {
-      const reset = setTimeout(() => setVisible(0), 3000);
-      return () => clearTimeout(reset);
-    }
-    const timer = setTimeout(() => setVisible(v => v + 1), 1200);
-    return () => clearTimeout(timer);
-  }, [visible, mounted]);
-
   return (
     <div className="rounded-3xl border border-[#e5e7eb] bg-white p-10">
       <div className="text-sm font-medium tracking-widest text-[#1a1a2e]/50">CHAT COPILOT</div>
       <h3 className="mt-3 text-3xl text-[#1a1a2e]">Ask in plain language.</h3>
       <p className="mt-3 text-[#1a1a2e]/65">"Where's order 4521?" — answered instantly, with the reasoning.</p>
-      <div className="mt-8 space-y-3">
-        {msgs.map((m, i) => {
-          if (!mounted || i >= visible) return null;
+      <div className="mt-8 space-y-3" ref={chatRef} style={{ maxHeight: "260px", overflowY: "auto" }}>
+        {displayMsgs.map((m, i) => {
           const isUser = m.role === "user";
           return (
             <div key={i} className={`${isUser ? "ml-auto max-w-[80%]" : "max-w-[85%]"}`} style={{ animation: "fadeIn 0.4s ease-out" }}>
@@ -750,13 +807,27 @@ function LiveChat() {
             </div>
           );
         })}
-        {mounted && visible < msgs.length && (
+        {loading && (
           <div className="flex gap-1 px-2">
             <div className="h-2 w-2 rounded-full bg-[#d1d5db] animate-bounce" />
             <div className="h-2 w-2 rounded-full bg-[#d1d5db] animate-bounce" style={{ animationDelay: "150ms" }} />
             <div className="h-2 w-2 rounded-full bg-[#d1d5db] animate-bounce" style={{ animationDelay: "300ms" }} />
           </div>
         )}
+        {/* Input */}
+        <form onSubmit={e => { e.preventDefault(); handleSend(); }} className="flex gap-2 mt-3">
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder="Ask something... e.g. 'Where is order 4521?'"
+            className="flex-1 rounded-xl border border-[#e5e7eb] bg-white px-4 py-2.5 text-sm placeholder:text-[#d1d5db] focus:outline-none focus:border-[#1a1a2e]"
+          />
+          <button type="submit" disabled={loading || !input.trim()}
+            className="grid h-10 w-10 place-items-center rounded-xl bg-[#1a1a2e] text-white disabled:opacity-40 hover:bg-[#1a1a2e]/90 transition-all">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -858,11 +929,9 @@ function Pricing() {
 /* ===== Social Proof ===== */
 function SocialProof() {
   return (
-    <Section center title={<>Trusted by logistics teams who'd rather ship than <em className="italic">babysit spreadsheets.</em></>}>
-      <div className="mx-auto grid max-w-4xl grid-cols-2 items-center gap-8 opacity-60 md:grid-cols-5">
-        {["NORTHBOUND", "CARGO/CO", "MERIDIAN", "PORTSIDE", "FLEETWORKS"].map((n) => (
-          <div key={n} className="text-center text-sm font-semibold tracking-widest text-[#1a1a2e]/50">{n}</div>
-        ))}
+    <Section center title={<>Trusted by logistics teams who&rsquo;d rather ship than <em className="italic">babysit spreadsheets.</em></>}>
+      <div className="mx-auto max-w-2xl text-center">
+        <p className="text-sm text-[#1a1a2e]/50">Used by freight forwarders, 3PLs, fleet operators, and D2C brands across India</p>
       </div>
     </Section>
   );

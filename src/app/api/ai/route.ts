@@ -28,14 +28,16 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json();
+    const { action, data } = body;
     const sessionUser = await getSessionUser(request);
-    if (!sessionUser) {
+
+    // Allow public copilot chat without auth
+    if (!sessionUser && !(action === "reasoning" && data?.agentId === "copilot")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { action, data } = body;
-    const userId = sessionUser.id;
+    const userId = sessionUser?.id || "public";
     const sql = neon(process.env.DATABASE_URL!);
 
     let result: string;
