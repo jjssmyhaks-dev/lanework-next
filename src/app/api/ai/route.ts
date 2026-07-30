@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { neon } from "@neondatabase/serverless";
 import { v4 as uuidv4 } from "uuid";
+import { rateLimit, aiRateLimit } from "@/lib/rate-limit";
 import {
   analyzeShipmentStatus,
   optimizeRoute,
@@ -10,23 +11,49 @@ import {
 } from "@/lib/ai";
 
 // GET — return recent agent tasks for dashboard / agents pages
-export async function GET() {
+// ?agent_type=shipment-tracking&limit=5
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const agentType = searchParams.get("agent_type");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "20", 10), 50);
+
     const sql = neon(process.env.DATABASE_URL!);
-    const tasks = await sql`
-      SELECT id, agent_type as agent, action_type as action, status, reasoning_trace as reasoning, created_at
-      FROM agent_tasks
-      ORDER BY created_at DESC
-      LIMIT 20
-    `;
+
+    let tasks;
+    if (agentType) {
+      tasks = await sql`
+        SELECT id, agent_type, action_type, status, reasoning_trace, created_at
+        FROM agent_tasks
+        WHERE agent_type = ${agentType}
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+    } else {
+      tasks = await sql`
+        SELECT id, agent_type, action_type, status, reasoning_trace, created_at
+        FROM agent_tasks
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+    }
     return NextResponse.json(tasks);
   } catch (error) {
     console.error("AI GET error:", error);
+    // Graceful degradation: return empty array, not 500
     return NextResponse.json([], { status: 200 });
   }
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 10 requests/minute per IP for AI endpoint
+  const rl = rateLimit(request, aiRateLimit);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment and try again.", retryAfter: Math.ceil((rl.resetAt - Date.now()) / 1000) },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)), "X-RateLimit-Remaining": "0" } }
+    );
+  }
   try {
     const body = await request.json();
     const { action, data } = body;

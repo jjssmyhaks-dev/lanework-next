@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { GlobalSearch } from "@/components/ui/global-search";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -98,11 +99,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-6 border-b border-gray-200 bg-white">
-          <button className="lg:hidden p-1.5 rounded-md hover:bg-gray-100" onClick={() => setSidebarOpen(true)}><Menu className="h-5 w-5 text-gray-600" /></button>
-          <div className="flex-1" />
+        <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-6 border-b border-gray-200 bg-white gap-4">
+          <button className="lg:hidden p-1.5 rounded-md hover:bg-gray-100 flex-shrink-0" onClick={() => setSidebarOpen(true)}><Menu className="h-5 w-5 text-gray-600" /></button>
+          <div className="hidden sm:block flex-1 max-w-sm">
+            <GlobalSearch />
+          </div>
+          <div className="flex-1 sm:hidden" />
           {user && (
-            <div className="hidden sm:flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-medium text-white">{user.name ? user.name.charAt(0).toUpperCase() : "U"}</div>
               <button onClick={() => { logout(); router.push("/login"); }} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"><LogOut className="h-3.5 w-3.5" />Sign out</button>
             </div>

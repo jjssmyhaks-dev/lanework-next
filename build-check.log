@@ -1,0 +1,26 @@
+﻿Γû▓ Next.js 16.2.10 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 18.7s
+  Running TypeScript ...
+npx : Failed to type check.
+At line:1 char:91
++ ... agents\lanework\workspace\lanework-next"; npx next build 2>&1 | Out-F ...
++                                               ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Failed to type check.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+./src/app/api/ai/route.ts:32:30
+Type error: Cannot find name 'body'.
+
+  [90m30 |[0m   [36mtry[0m {
+  [90m31 |[0m     [36mconst[0m sessionUser = [36mawait[0m getSessionUser(request);
+[31m[1m>[0m [90m32 |[0m     [36mconst[0m { action, data } = body;
+  [90m   |[0m                              [31m[1m^[0m
+  [90m33 |[0m
+  [90m34 |[0m     [90m// Allow public copilot chat without auth[0m
+  [90m35 |[0m     [36mif[0m (!sessionUser && !(action === [32m"reasoning"[0m && data?.agentId === 
+[32m"copilot"[0m)) {
+Next.js build worker exited with code: 1 and signal: null

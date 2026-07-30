@@ -19,9 +19,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: result.error }, { status: 401 });
     }
     const res = NextResponse.json({ success: true, user: result.user }, { status: 200 });
-    res.cookies.set("auth-token", result.token!, {
+    // Access token: short-lived (15 min), httpOnly cookie
+    res.cookies.set("auth-token", result.accessToken!, {
       httpOnly: true, secure: process.env.NODE_ENV === "production",
-      sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 7,
+      sameSite: "lax", path: "/", maxAge: 60 * 15, // 15 minutes
+    });
+    // Refresh token: long-lived (30 days), httpOnly cookie, path-restricted to /api/auth/refresh
+    res.cookies.set("refresh-token", result.refreshToken!, {
+      httpOnly: true, secure: process.env.NODE_ENV === "production",
+      sameSite: "lax", path: "/api/auth/refresh", maxAge: 60 * 60 * 24 * 30,
     });
     return res;
   } catch (e: any) {

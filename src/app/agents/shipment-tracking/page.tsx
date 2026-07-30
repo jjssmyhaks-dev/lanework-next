@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Truck, Globe, Bell, Clock, FileCheck, BarChart3, Zap, Shield, Activity } from "lucide-react";
+import { ArrowLeft, ArrowRight, Truck, Globe, Bell, Clock, FileCheck, BarChart3, Zap, Shield } from "lucide-react";
+import { AgentLiveActivity } from "@/components/ui/agent-live-activity";
 
 export default function ShipmentTrackingPage() {
   return (
@@ -60,6 +61,8 @@ export default function ShipmentTrackingPage() {
               </div>
             ))}
           </div>
+
+          <AgentLiveActivity agentId="shipment-tracking" />
 
           <h2 className="text-2xl font-semibold mt-10">Trust &amp; control</h2>
           <div className="flex items-start gap-4 p-5 rounded-xl bg-[#fafafa] border border-[#e5e7eb] mt-4">

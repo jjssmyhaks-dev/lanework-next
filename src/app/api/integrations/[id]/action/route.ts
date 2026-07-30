@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import crypto from "crypto";
+import { rateLimit, integrationRateLimit } from "@/lib/rate-limit";
 
 // ── Shiprocket auth helper (token cached per process; auth only when needed) ──
 let _shiprocketToken: { token: string; expiresAt: number } | null = null;
@@ -39,6 +40,15 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Rate limit: 30 requests/minute per IP for integration actions
+  const rl = rateLimit(request, integrationRateLimit);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment and try again.", retryAfter: Math.ceil((rl.resetAt - Date.now()) / 1000) },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)), "X-RateLimit-Remaining": "0" } }
+    );
+  }
+
   try {
     const { id } = await params;
     const body = await request.json();

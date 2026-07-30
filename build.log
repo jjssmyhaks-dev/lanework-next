@@ -1,0 +1,84 @@
+﻿Γû▓ Next.js 16.2.10 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 11.6s
+  Running TypeScript ...
+  Finished TypeScript in 12.5s ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/53) ...
+  Generating static pages using 3 workers (13/53) 
+  Generating static pages using 3 workers (26/53) 
+  Generating static pages using 3 workers (39/53) 
+Γ£ô Generating static pages using 3 workers (53/53) in 1712ms
+  Finalizing page optimization ...
+
+Route (app)
+Γöî Γùï /
+Γö£ Γùï /_not-found
+Γö£ Γùï /agents
+Γö£ Γùï /agents/customer-communication
+Γö£ Γùï /agents/fleet-management
+Γö£ Γùï /agents/inventory-management
+Γö£ Γùï /agents/route-optimization
+Γö£ Γùï /agents/shipment-tracking
+Γö£ Γùï /agents/warehouse-operations
+Γö£ ╞Æ /api/agents/trust
+Γö£ ╞Æ /api/ai
+Γö£ ╞Æ /api/approvals
+Γö£ ╞Æ /api/auth/[...nextauth]
+Γö£ ╞Æ /api/auth/forgot-password
+Γö£ ╞Æ /api/auth/login
+Γö£ ╞Æ /api/auth/me
+Γö£ ╞Æ /api/auth/register
+Γö£ ╞Æ /api/contact
+Γö£ ╞Æ /api/customer
+Γö£ ╞Æ /api/customer/[id]
+Γö£ ╞Æ /api/dashboard/stats
+Γö£ ╞Æ /api/db/init
+Γö£ ╞Æ /api/eval
+Γö£ ╞Æ /api/export/csv
+Γö£ ╞Æ /api/fleet/drivers
+Γö£ ╞Æ /api/fleet/drivers/[id]
+Γö£ ╞Æ /api/fleet/vehicles
+Γö£ ╞Æ /api/fleet/vehicles/[id]
+Γö£ ╞Æ /api/import/csv
+Γö£ ╞Æ /api/integrations
+Γö£ ╞Æ /api/integrations/[id]
+Γö£ ╞Æ /api/integrations/[id]/action
+Γö£ ╞Æ /api/inventory
+Γö£ ╞Æ /api/inventory/[id]
+Γö£ ╞Æ /api/onboarding
+Γö£ ╞Æ /api/routes
+Γö£ ╞Æ /api/routes/[id]
+Γö£ ╞Æ /api/shipment
+Γö£ ╞Æ /api/shipment/[id]
+Γö£ ╞Æ /api/usage
+Γö£ ╞Æ /api/warehouse
+Γö£ ╞Æ /api/warehouse/[id]
+Γö£ ╞Æ /api/webhooks/inbound/[id]
+Γö£ ╞Æ /api/webhooks/whatsapp/[id]
+Γö£ Γùï /copilot
+Γö£ Γùï /customer
+Γö£ Γùï /dashboard
+Γö£ Γùï /docs
+Γö£ Γùï /evals
+Γö£ Γùï /fleet
+Γö£ Γùï /how-it-works
+Γö£ Γùï /integrations
+Γö£ Γùï /inventory
+Γö£ Γùï /login
+Γö£ Γùï /onboarding
+Γö£ Γùï /pricing
+Γö£ Γùï /register
+Γö£ Γùï /routes
+Γö£ Γùï /shipment
+Γö£ Γùï /trust
+Γö£ Γùï /voice
+Γö£ Γùï /voice/register
+Γöö Γùï /warehouse
+
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

@@ -1,0 +1,414 @@
+// ── Prisma Schema for Lanework ──
+// This schema maps to the existing PostgreSQL database (Neon).
+// Generated tables match what's already in production — do NOT run migrate yet.
+// Run `npx prisma generate` to build the client; migrations are for future use.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ═══════════════════════════════════════════
+// Auth
+// ═══════════════════════════════════════════
+
+model User {
+  id            String    @id
+  name          String?
+  email         String    @unique
+  passwordHash  String?   @map("password_hash")
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+model Session {
+  sessionToken String   @id @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  @@map("sessions")
+}
+
+// ═══════════════════════════════════════════
+// Organization / Billing
+// ═══════════════════════════════════════════
+
+model Organization {
+  id        String   @id
+  name      String
+  slug      String?  @unique
+  ownerId   String   @map("owner_id")
+  logoUrl   String?  @map("logo_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("organizations")
+}
+
+model Subscription {
+  id                   String    @id
+  orgId                String    @map("org_id")
+  plan                 String    @default("starter")
+  status               String    @default("trial")
+  trialStart           DateTime  @default(now()) @map("trial_start")
+  trialEnd             DateTime? @map("trial_end")
+  paymentMethodAdded   Boolean   @default(false) @map("payment_method_added")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  gracePeriodEnds      DateTime? @map("grace_period_ends")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("subscriptions")
+}
+
+// ═══════════════════════════════════════════
+// Integrations
+// ═══════════════════════════════════════════
+
+model Integration {
+  id              String    @id
+  orgId           String    @map("org_id")
+  integrationType String?   @map("integration_type")
+  type            String?
+  name            String
+  status          String    @default("disconnected")
+  config          Json      @default("{}")
+  connectedAt     DateTime? @map("connected_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("integrations")
+}
+
+// ═══════════════════════════════════════════
+// Fleet
+// ═══════════════════════════════════════════
+
+model Vehicle {
+  id                 String    @id
+  userId             String?   @map("user_id")
+  plate              String?
+  registration      String?
+  type               String
+  status             String    @default("available")
+  mileageKm          Float     @default(0) @map("mileage_km")
+  capacityKg         Float?    @map("capacity_kg")
+  lastMaintenance    DateTime? @map("last_maintenance_date")
+  maintenanceDueDate DateTime? @map("maintenance_due_date")
+  lastSeenAt         DateTime? @map("last_seen_at")
+  lastLat            Float?    @map("last_lat")
+  lastLng            Float?    @map("last_lng")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("vehicles")
+}
+
+model Driver {
+  id              String   @id
+  userId          String?  @map("user_id")
+  name            String
+  phone           String?
+  license         String?
+  licenseNumber   String?  @map("license_number")
+  status          String   @default("available")
+  hoursDriven     Float    @default(0) @map("hours_driven")
+  maxHours        Float    @default(11) @map("max_hours")
+  hoursToday      Float?   @map("hours_today")
+  assignedVehicle String?  @map("assigned_vehicle")
+  vehicleId       String?  @map("vehicle_id")
+  assignedRouteId String?  @map("assigned_route_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("drivers")
+}
+
+// ═══════════════════════════════════════════
+// Logistics
+// ═══════════════════════════════════════════
+
+model Shipment {
+  id                String    @id
+  userId            String?   @map("user_id")
+  trackingNumber    String    @map("tracking_number")
+  carrier           String
+  status            String    @default("pending")
+  origin            String?
+  destination       String?
+  estimatedDelivery String?   @map("estimated_delivery")
+  eta               String?
+  customerName      String?   @map("customer_name")
+  customerPhone     String?   @map("customer_phone")
+  metadata          Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("shipments")
+}
+
+model Inventory {
+  id              String   @id
+  userId          String?  @map("user_id")
+  sku             String
+  name            String
+  itemName        String?  @map("item_name")
+  category        String?
+  quantity        Int      @default(0)
+  unit            String?
+  warehouseId     String?  @map("warehouse_id")
+  warehouse       String?
+  location        String?
+  reorderPoint    Int      @default(0) @map("reorder_point")
+  reorderQuantity Int      @default(0) @map("reorder_quantity")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("inventory")
+}
+
+model Order {
+  id           String   @id
+  userId       String?  @map("user_id")
+  orderNumber  String   @map("order_number")
+  customerName String?  @map("customer_name")
+  status       String   @default("pending")
+  totalAmount  Float?   @map("total_amount")
+  items        Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("orders")
+}
+
+model Route {
+  id                  String   @id
+  userId              String?  @map("user_id")
+  name                String
+  origin              String
+  destination         String
+  stops               Int      @default(1)
+  distanceKm          Float    @default(0) @map("distance_km")
+  estimatedMinutes    Int      @default(0) @map("estimated_minutes")
+  estimatedDurationMin Int?    @map("estimated_duration_min")
+  status              String   @default("active")
+  optimizations       Json?
+  driverId            String?  @map("driver_id")
+  vehicleId           String?  @map("vehicle_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("routes")
+}
+
+model Customer {
+  id           String   @id
+  userId       String?  @map("user_id")
+  customerName String?  @map("customer_name")
+  name         String?
+  email        String?
+  phone        String?
+  company      String?
+  channel      String?  @default("chat")
+  status       String   @default("active")
+  address      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("customers")
+}
+
+// ═══════════════════════════════════════════
+// Warehouses
+// ═══════════════════════════════════════════
+
+model WarehouseTask {
+  id         String   @id
+  userId     String   @map("user_id")
+  type       String
+  priority   String   @default("medium")
+  status     String   @default("pending")
+  assignedTo String?  @map("assigned_to")
+  dock       String?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("warehouse")
+}
+
+// ═══════════════════════════════════════════
+// Agent System
+// ═══════════════════════════════════════════
+
+model AgentTask {
+  id        String   @id
+  agentId   String?  @map("agent_id")
+  userId    String   @map("user_id")
+  action    String?
+  agentType String?  @map("agent_type")
+  status    String   @default("pending")
+  reasoning String?
+  payload   Json?
+  result    Json?
+  input     Json?
+  output    Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("agent_tasks")
+}
+
+model AgentConfig {
+  id            String   @id
+  orgId         String   @map("org_id")
+  agentType     String   @map("agent_type")
+  trustLevel    String   @default("propose_only") @map("trust_level")
+  riskThreshold Float    @default(0.3) @map("risk_threshold")
+  maxAutoValue  Float    @default(100) @map("max_auto_value")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([orgId, agentType])
+  @@map("agent_trust_configs")
+}
+
+model ApprovalAction {
+  id             String    @id
+  orgId          String    @map("org_id")
+  agentType      String    @map("agent_type")
+  actionType     String    @map("action_type")
+  description    String?
+  inputData      Json?     @map("input_data")
+  status         String    @default("pending")
+  approvedBy     String?   @map("approved_by")
+  rejectedReason String?   @map("rejected_reason")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  resolvedAt     DateTime? @map("resolved_at")
+
+  @@map("approval_actions")
+}
+
+// ═══════════════════════════════════════════
+// Webhooks / Communications
+// ═══════════════════════════════════════════
+
+model Webhook {
+  id            String   @id
+  type          String
+  endpoint      String?
+  secret        String?
+  integrationId String?  @map("integration_id")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("webhooks")
+}
+
+model WebhookEvent {
+  id            String    @id
+  webhookId     String?   @map("webhook_id")
+  integrationId String?   @map("integration_id")
+  eventType     String?   @map("event_type")
+  payload       Json?
+  receivedAt    DateTime? @map("received_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("webhook_events")
+}
+
+model WhatsAppMessage {
+  id        String   @id
+  recipient String?
+  status    String?
+  content   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("whatsapp_messages")
+}
+
+model EwayBill {
+  id         String   @id
+  ewbNo      String?  @map("ewb_no")
+  status     String?
+  shipmentId String?  @map("shipment_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("eway_bills")
+}
+
+// ═══════════════════════════════════════════
+// Conversations / Messages
+// ═══════════════════════════════════════════
+
+model Conversation {
+  id            String    @id
+  userId        String    @map("user_id")
+  title         String?
+  customerName  String?   @map("customer_name")
+  channel       String    @default("chat")
+  status        String    @default("open")
+  sentiment     String?
+  model         String    @default("cloudflare-workers-ai")
+  lastMessageAt DateTime  @default(now()) @map("last_message_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String   @id
+  conversationId String   @map("conversation_id")
+  role           String
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("messages")
+}
+
+// ═══════════════════════════════════════════
+// Audit / Usage / Contact
+// ═══════════════════════════════════════════
+
+model AuditLog {
+  id         String   @id
+  userId     String?  @map("user_id")
+  action     String?
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
+
+model UsageEvent {
+  id        String   @id
+  orgId     String   @map("org_id")
+  eventType String   @map("event_type")
+  category  String?
+  value     Float    @default(1)
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("usage_events")
+}
+
+model ContactSubmission {
+  id        String   @id
+  name      String
+  email     String
+  company   String?
+  message   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("contact_submissions")
+}
