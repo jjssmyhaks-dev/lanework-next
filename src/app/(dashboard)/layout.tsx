@@ -43,12 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (mounted && !loading && !user) { router.push("/login"); }
   }, [mounted, loading, user, router]);
 
-  // Redirect /dashboard to /chat (chat is the primary interface)
-  useEffect(() => {
-    if (mounted && pathname === "/dashboard") {
-      router.replace("/chat");
-    }
-  }, [mounted, pathname, router]);
+
 
   if (!mounted) {
     return (

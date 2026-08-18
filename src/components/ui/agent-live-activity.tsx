@@ -55,19 +55,26 @@ export function AgentLiveActivity({ agentId }: { agentId: string }) {
 
       const [tasksRes, intRes] = await Promise.all([
         fetch(`/api/ai?agent_type=${encodeURIComponent(agentType)}&limit=5`),
-        fetch(`/api/integrations?agent=${encodeURIComponent(agentId)}`),
+        fetch(`/api/integrations`),
       ]);
 
       if (tasksRes.ok) {
-        const data = await tasksRes.json();
-        setTasks(Array.isArray(data) ? data : []);
+        try {
+          const text = await tasksRes.text();
+          const data = JSON.parse(text);
+          setTasks(Array.isArray(data) ? data : []);
+        } catch { setTasks([]); }
       } else {
         setTasks([]);
       }
 
       if (intRes.ok) {
-        const data = await intRes.json();
-        setIntegrations(Array.isArray(data) ? data : []);
+        try {
+          const text = await intRes.text();
+          const data = JSON.parse(text);
+          const integrations = Array.isArray(data) ? data : (data?.integrations || []);
+          setIntegrations(integrations);
+        } catch { setIntegrations([]); }
       } else {
         setIntegrations([]);
       }

@@ -141,7 +141,7 @@ const TIER_LABELS: Record<number, { label: string; color: string }> = {
   3: { label: "Scale", color: "bg-purple-100 text-purple-800" },
 };
 
-export const GET = withAuth(async (request) => {
+export async function GET(request: NextRequest) {
   try {
     const sql = neon(process.env.DATABASE_URL!);
     const { searchParams } = new URL(request.url);
@@ -191,7 +191,7 @@ export const GET = withAuth(async (request) => {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-});
+}
 
 const createIntegrationSchema = z.object({
   type: z.string().min(1, "type is required"),
