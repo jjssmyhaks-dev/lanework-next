@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { GlobalSearch } from "@/components/ui/global-search";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { ToastProvider } from "@/components/ui/toast";
 
 const primaryNav = [
   { href: "/chat", label: "Chat", icon: MessageSquare },
@@ -67,6 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!user) return null;
 
   return (
+    <ToastProvider>
     <div className="flex h-screen overflow-hidden bg-white">
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/20 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
@@ -199,5 +201,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
     </div>
+    </ToastProvider>
   );
 }
