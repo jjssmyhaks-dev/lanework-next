@@ -180,7 +180,7 @@ function ActiveDashboard({ data }: { data: any }) {
               { label: "New Shipment", href: "/shipment", icon: Truck },
               { label: "Add Inventory", href: "/inventory", icon: Package },
               { label: "Plan Route", href: "/routes", icon: Route },
-              { label: "Ask Copilot", href: "/copilot", icon: MessageSquare },
+              { label: "Ask AI", href: "/chat", icon: MessageSquare },
               { label: "Integrations", href: "/integrations", icon: Plug },
               { label: "Configure Agents", href: "/onboarding", icon: Shield },
             ].map(a => (

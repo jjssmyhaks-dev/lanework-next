@@ -14,7 +14,6 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 const primaryNav = [
   { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/copilot", label: "Copilot (Legacy)", icon: Bot },
 ];
 
 const secondaryNav = [

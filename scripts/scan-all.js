@@ -1,7 +1,7 @@
 const http = require('http');
 const tests = [
   ['GET','/'],['GET','/login'],['GET','/register'],
-  ['GET','/dashboard'],['GET','/onboarding'],['GET','/copilot'],
+  ['GET','/dashboard'],['GET','/onboarding'],['GET','/chat'],
   ['GET','/shipment'],['GET','/inventory'],['GET','/routes'],['GET','/warehouse'],['GET','/fleet'],['GET','/customer'],
   ['GET','/api/shipment'],['GET','/api/inventory'],['GET','/api/routes'],
   ['GET','/api/warehouse'],['GET','/api/fleet/drivers'],['GET','/api/fleet/vehicles'],
