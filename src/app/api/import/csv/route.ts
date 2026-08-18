@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { withAuth } from "@/lib/auth";
+import { csvImportSchema, validateBody } from "@/lib/validations";
 
 /**
  * CSV Import API
  * POST /api/import/csv
  * Accepts CSV file upload or JSON array, maps to shipments/inventory/orders
  */
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request) => {
   try {
     const contentType = request.headers.get("content-type") || "";
     const sql = neon(process.env.DATABASE_URL!);
@@ -143,7 +145,7 @@ export async function POST(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});
 
 /** Split a CSV line into fields, respecting double-quoted values (incl. embedded commas). */
 function splitCSVLine(line: string): string[] {

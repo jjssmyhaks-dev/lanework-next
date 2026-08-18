@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { withAuth } from "@/lib/auth";
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request) => {
   try {
     const { searchParams } = new URL(request.url);
     const orgId = searchParams.get("orgId") || "default";
@@ -25,9 +26,9 @@ export async function GET(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});
 
-export async function PUT(request: NextRequest) {
+export const PUT = withAuth(async (request) => {
   try {
     const body = await request.json();
     const { orgId, configs } = body;
@@ -46,4 +47,4 @@ export async function PUT(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});

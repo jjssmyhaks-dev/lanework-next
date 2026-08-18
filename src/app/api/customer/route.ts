@@ -1,9 +1,11 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
+import { createCustomerSchema, validateBody } from "@/lib/validations";
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function GET() {
+export const GET = withAuth(async () => {
   try {
     const customers = await sql`
       SELECT * FROM customers ORDER BY created_at DESC
@@ -14,20 +16,15 @@ export async function GET() {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request) => {
   try {
-    const body = await request.json();
-    const { name, customerName, email, phone, status } = body;
+    const validation = await validateBody(request, createCustomerSchema);
+    if (!validation.success) return validation.error;
+    const { name, customerName, email, phone, status } = validation.data;
 
-    const customerNameVal = name || customerName;
-    if (!customerNameVal) {
-      return NextResponse.json(
-        { error: "Missing required field: name" },
-        { status: 400 }
-      );
-    }
+    const customerNameVal = name || customerName!;
 
     const id = crypto.randomUUID();
 
@@ -45,4 +42,4 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

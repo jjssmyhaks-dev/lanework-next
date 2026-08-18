@@ -471,7 +471,6 @@ model Integration {
   tenant Tenant? @relation(fields: [tenantId], references: [id])
 
   @@unique([integrationType])
-  @@unique([tenantId])
   @@map("integrations")
 }
 

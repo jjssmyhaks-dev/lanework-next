@@ -1,9 +1,11 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
+import { createInventorySchema, validateBody } from "@/lib/validations";
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function GET(request: Request) {
+export const GET = withAuth(async (request) => {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId") || "default";
@@ -17,19 +19,13 @@ export async function GET(request: Request) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request) => {
   try {
-    const body = await request.json();
-    const { sku, name, quantity, reorderPoint, warehouse, location, userId } = body;
-
-    if (!sku || !name || quantity === undefined) {
-      return NextResponse.json(
-        { error: "Missing required fields: sku, name, quantity" },
-        { status: 400 }
-      );
-    }
+    const validation = await validateBody(request, createInventorySchema);
+    if (!validation.success) return validation.error;
+    const { sku, name, quantity, reorderPoint, warehouse, location } = validation.data;
 
     const id = crypto.randomUUID();
     const user_id = userId || "default";
@@ -48,4 +44,4 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

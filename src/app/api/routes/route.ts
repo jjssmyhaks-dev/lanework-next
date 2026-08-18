@@ -1,5 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
+import { createRouteSchema, validateBody } from "@/lib/validations";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -16,7 +18,7 @@ function toApiShape(row: Record<string, unknown>) {
   };
 }
 
-export async function GET() {
+export const GET = withAuth(async () => {
   try {
     const routes = await sql`
       SELECT * FROM routes ORDER BY created_at DESC
@@ -27,19 +29,13 @@ export async function GET() {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request) => {
   try {
-    const body = await request.json();
-    const { name, origin, destination, stops, distanceKm, estimatedMinutes, status, distance_km, estimated_minutes, total_stops } = body;
-
-    if (!name) {
-      return NextResponse.json(
-        { error: "Missing required field: name" },
-        { status: 400 }
-      );
-    }
+    const validation = await validateBody(request, createRouteSchema);
+    if (!validation.success) return validation.error;
+    const { name, origin, destination, stops, distanceKm, estimatedMinutes, status, distance_km, estimated_minutes, total_stops } = validation.data;
 
     const id = crypto.randomUUID();
     const distanceVal = distanceKm ?? distance_km ?? 0;
@@ -68,4 +64,4 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

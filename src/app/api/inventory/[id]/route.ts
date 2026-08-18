@@ -1,13 +1,11 @@
 import { neon } from "@neondatabase/serverless";
 import { NextRequest, NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
+export const GET = withAuth(async (_request, _user, ctx) => {
+  const { id } = await (ctx!.params! as any);
   try {
     const [item] = await sql`SELECT * FROM inventory WHERE id = ${id}`;
     if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -16,13 +14,10 @@ export async function GET(
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
+export const PATCH = withAuth(async (request, _user, ctx) => {
+  const { id } = await (ctx!.params! as any);
   try {
     const body = await request.json();
     const { sku, name, quantity, reorderPoint, warehouse, location } = body;
@@ -42,13 +37,10 @@ export async function PATCH(
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
+export const DELETE = withAuth(async (_request, _user, ctx) => {
+  const { id } = await (ctx!.params! as any);
   try {
     await sql`DELETE FROM inventory WHERE id = ${id}`;
     return NextResponse.json({ success: true });

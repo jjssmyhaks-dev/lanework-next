@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { withAuth } from "@/lib/auth";
 
-export async function GET() {
+export const GET = withAuth(async () => {
   try {
     const sql = neon(process.env.DATABASE_URL!);
     const userId = "default-user";
@@ -21,4 +22,4 @@ export async function GET() {
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
+});

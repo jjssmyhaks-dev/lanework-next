@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { withAuth } from "@/lib/auth";
 
 /** Pre-defined integration catalog (mirrors the one in action/route.ts) */
 const INTEGRATION_CATALOG: Record<string, any> = {
@@ -42,10 +43,7 @@ const INTEGRATION_CATALOG: Record<string, any> = {
   },
 };
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withAuth(async (_request, _user, ctx) => {
   try {
     const { id } = await params;
     const sql = neon(process.env.DATABASE_URL!);
@@ -99,14 +97,11 @@ export async function GET(
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const PATCH = withAuth(async (request, _user, ctx) => {
   try {
-    const { id } = await params;
+    const { id } = await (ctx!.params! as any);
     const body = await request.json();
     const { status, config } = body;
     const sql = neon(process.env.DATABASE_URL!);
@@ -132,14 +127,11 @@ export async function PATCH(
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const DELETE = withAuth(async (_request, _user, ctx) => {
   try {
-    const { id } = await params;
+    const { id } = await (ctx!.params! as any);
     const sql = neon(process.env.DATABASE_URL!);
 
     // Try by UUID first (id), fall back to integration_type lookup
@@ -167,4 +159,4 @@ export async function DELETE(
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});

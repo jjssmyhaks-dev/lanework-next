@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 import crypto from "crypto";
 import { rateLimit, integrationRateLimit } from "@/lib/rate-limit";
 import { callMcpAction } from "@/lib/mcp";
+import { withAuth } from "@/lib/auth";
 
 // ── e-way bills table — created lazily so the feature works on fresh DBs ──
 async function ensureEwayBillsTable(sql: any) {
@@ -50,10 +51,7 @@ async function getShiprocketToken(): Promise<string | null> {
  * POST /api/integrations/[id]/action
  * Routes user actions to the appropriate MCP logic or API
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withAuth(async (request, _user, ctx) => {
   // Rate limit: 30 requests/minute per IP for integration actions
   const rl = rateLimit(request, integrationRateLimit);
   if (!rl.allowed) {
@@ -64,7 +62,7 @@ export async function POST(
   }
 
   try {
-    const { id } = await params;
+    const { id } = await (ctx!.params! as any);
     const body = await request.json();
     const { action, ...payload } = body;
 
@@ -96,7 +94,7 @@ export async function POST(
   } catch (e: any) {
     return NextResponse.json({ success: false, mode: "simulated", error: e.message }, { status: 500 });
   }
-}
+});
 
 async function routeAction(type: string, action: string, config: any, sql: any, payload: any): Promise<any> {
   // ── MCP servers first: the standalone mcp-servers/* code is the reference

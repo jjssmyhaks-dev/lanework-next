@@ -1,9 +1,10 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function GET(request: Request) {
+export const GET = withAuth(async (request) => {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId") || "default";
@@ -17,9 +18,9 @@ export async function GET(request: Request) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request) => {
   try {
     const body = await request.json();
     const { type, priority, assignedTo, dock, metadata, userId } = body;
@@ -50,4 +51,4 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

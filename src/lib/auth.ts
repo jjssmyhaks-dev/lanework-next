@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
+import { NextRequest, NextResponse } from "next/server";
 
 const SECRET_KEY = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET;
 if (!SECRET_KEY) {
@@ -191,6 +192,32 @@ export async function getSessionUser(request: Request): Promise<SessionUser | nu
 }
 
 // ── Login / Logout ──
+
+// ── Auth Middleware Wrapper ──
+
+export type AuthenticatedHandler = (
+  request: NextRequest,
+  user: SessionUser,
+  ctx?: { params?: Record<string, string> }
+) => Promise<Response>;
+
+/**
+ * Wraps an API route handler with JWT authentication.
+ * Returns 401 if the request has no valid token.
+ * Passes the authenticated user to the handler.
+ */
+export function withAuth(handler: AuthenticatedHandler) {
+  return async (request: NextRequest, ctx?: { params?: Record<string, string> }) => {
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized — please log in" },
+        { status: 401 }
+      );
+    }
+    return handler(request, user, ctx);
+  };
+}
 
 export async function login(
   email: string,

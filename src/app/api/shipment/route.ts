@@ -1,5 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
+import { withAuth } from "@/lib/auth";
+import { createShipmentSchema, validateBody } from "@/lib/validations";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -24,7 +26,7 @@ function toApiShape(row: Record<string, unknown>) {
   };
 }
 
-export async function GET() {
+export const GET = withAuth(async () => {
   try {
     const shipments = await sql`
       SELECT * FROM shipments ORDER BY created_at DESC
@@ -35,11 +37,12 @@ export async function GET() {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request) => {
   try {
-    const body = await request.json();
+    const validation = await validateBody(request, createShipmentSchema);
+    if (!validation.success) return validation.error;
     const {
       trackingNumber,
       tracking_number,
@@ -54,15 +57,9 @@ export async function POST(request: Request) {
       customer_name,
       customerPhone,
       customer_phone,
-    } = body;
+    } = validation.data;
 
-    const tn = tracking_number || trackingNumber;
-    if (!tn || !carrier || !origin || !destination) {
-      return NextResponse.json(
-        { error: "Missing required fields: tracking_number, carrier, origin, destination" },
-        { status: 400 }
-      );
-    }
+    const tn = tracking_number || trackingNumber!;
 
     const id = crypto.randomUUID();
     const etaVal = estimated_delivery || estimatedDelivery || eta || null;
@@ -91,4 +88,4 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

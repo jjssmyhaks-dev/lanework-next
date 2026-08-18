@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { withAuth } from "@/lib/auth";
 
 /* Multi-step onboarding: create organization, subscription, integrations, trust */
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request) => {
   try {
     const { searchParams } = new URL(request.url);
     const orgId = searchParams.get("orgId");
@@ -20,9 +21,9 @@ export async function GET(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request) => {
   try {
     const body = await request.json();
     const { step, userId, orgName, plan, integrations: intList, trustConfigs } = body;
@@ -57,4 +58,4 @@ export async function POST(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});

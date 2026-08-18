@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { withAuth } from "@/lib/auth";
 
 /**
  * CSV Export API
  * GET /api/export/csv?entity=shipments&format=csv
  * Exports data as CSV or JSON
  */
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request) => {
   try {
     const { searchParams } = new URL(request.url);
     const entity = searchParams.get("entity") || "shipments";
@@ -99,4 +100,4 @@ export async function GET(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});

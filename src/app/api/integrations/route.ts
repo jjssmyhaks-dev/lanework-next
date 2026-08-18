@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { withAuth } from "@/lib/auth";
 
 // Tier 1 — Universal (works regardless of what customer has)
 // Tier 2 — High-value India-specific
@@ -138,7 +139,7 @@ const TIER_LABELS: Record<number, { label: string; color: string }> = {
   3: { label: "Scale", color: "bg-purple-100 text-purple-800" },
 };
 
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request) => {
   try {
     const sql = neon(process.env.DATABASE_URL!);
     const { searchParams } = new URL(request.url);
@@ -188,9 +189,9 @@ export async function GET(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request) => {
   try {
     const body = await request.json();
     const { type, config } = body;
@@ -252,4 +253,4 @@ export async function POST(request: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
-}
+});

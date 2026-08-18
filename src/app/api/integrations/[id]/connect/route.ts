@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import crypto from "crypto";
 import { getIntegrationSetup } from "@/lib/integration-setup";
+import { withAuth } from "@/lib/auth";
 
 /**
  * POST /api/integrations/[id]/connect
@@ -9,12 +10,9 @@ import { getIntegrationSetup } from "@/lib/integration-setup";
  * Body: { config: Record<string, string> }
  * Validates required env vars for the integration.
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withAuth(async (request, _user, ctx) => {
   try {
-    const { id } = await params;
+    const { id } = await (ctx!.params! as any);
     const body = await request.json();
     const { config } = body;
 
@@ -104,18 +102,15 @@ export async function POST(
       { status: 500 }
     );
   }
-}
+});
 
 /**
  * GET /api/integrations/[id]/connect
  * Returns the current connection status and setup metadata for an integration.
  */
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withAuth(async (_request, _user, ctx) => {
   try {
-    const { id } = await params;
+    const { id } = await (ctx!.params! as any);
     const sql = neon(process.env.DATABASE_URL!);
     const setup = getIntegrationSetup(id);
 
@@ -163,4 +158,4 @@ export async function GET(
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
   }
-}
+});

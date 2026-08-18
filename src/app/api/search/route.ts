@@ -1,6 +1,8 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
+import { withAuth } from "@/lib/auth";
+import { searchSchema, validateBody } from "@/lib/validations";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -28,7 +30,7 @@ function sanitiseQuery(raw: string): string {
     .join(" & ");
 }
 
-export async function POST(request: Request) {
+export const POST = withAuth(async (request) => {
   // ── Rate limit ──────────────────────────────────────────────────────────
   const rl = rateLimit(request, { maxRequests: 30, windowMs: 60_000, group: "search" });
   if (!rl.allowed) {
@@ -39,9 +41,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
-    const query: string = (body.query || "").trim();
-    const types: SearchType[] | undefined = body.types;
+    const validation = await validateBody(request, searchSchema);
+    if (!validation.success) return validation.error;
+    const { query: rawQuery, types } = validation.data;
+    const query = rawQuery.trim();
 
     // ── Empty query ───────────────────────────────────────────────────────
     if (!query) {
@@ -229,4 +232,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+});
