@@ -20,7 +20,8 @@
  * - SHIPROCKET_CHANNEL_ID (optional, for multi-channel)
  */
 
-import { LaneworkMCPServer } from "../shared/server.js";
+import { LaneworkMCPServer, isDirectRun } from "../shared/server.ts";
+import crypto from "crypto";
 
 const SHIPROCKET_BASE = "https://apiv2.shiprocket.in/v1/external";
 
@@ -393,9 +394,15 @@ export class ShiprocketMCP extends LaneworkMCPServer {
     const status = statusMap[event.shipment_status_id] || event.shipment_status || "unknown";
 
     try {
+      let shipmentId: string | null = null;
+      try {
+        const [s] = await this.sql`SELECT id FROM shipments WHERE tracking_number = ${awb} LIMIT 1`;
+        shipmentId = s?.id || null;
+      } catch { /* ignore */ }
       await this.sql`
-        INSERT INTO shipment_events (id, tracking_number, status, location, description, created_at)
-        VALUES (${crypto.randomUUID()}, ${awb}, ${status}, ${event.current_location || ""}, ${event.status_description || ""}, NOW())
+        INSERT INTO shipment_events (id, shipment_id, event_type, location, description, created_at)
+        VALUES (${crypto.randomUUID()}, ${shipmentId}, ${status},
+          ${JSON.stringify({ address: event.current_location || "" })}::jsonb, ${event.status_description || ""}, NOW())
       `;
 
       await this.sql`
@@ -418,97 +425,105 @@ export class ShiprocketMCP extends LaneworkMCPServer {
 }
 
 // ─── MCP Server entry point ───
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import crypto from "crypto";
-
-const mcp = new ShiprocketMCP();
-
-const server = new Server(
-  { name: "lanework-shiprocket", version: "1.0.0" },
-  { capabilities: { tools: {} } }
-);
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: "track_shipment",
-      description: "Track any shipment by AWB across all Indian carriers. Returns real-time status, location, and scan history.",
-      inputSchema: {
-        type: "object",
-        properties: { awb: { type: "string", description: "AWB/Tracking number" } },
-        required: ["awb"],
-      },
-    },
-    {
-      name: "create_shipment",
-      description: "Book a shipment with the best carrier. Returns AWB, courier name, and label URL.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          orderId: { type: "string" },
-          pickupPincode: { type: "string" },
-          deliveryPincode: { type: "string" },
-          weight: { type: "number" },
-          length: { type: "number" },
-          breadth: { type: "number" },
-          height: { type: "number" },
-          paymentMode: { type: "string", enum: ["prepaid", "cod"] },
-          codAmount: { type: "number" },
-          customerName: { type: "string" },
-          customerPhone: { type: "string" },
-          customerAddress: { type: "string" },
-          customerEmail: { type: "string" },
+async function main(): Promise<void> {
+const SDK = "@modelcontextprotocol/sdk";
+  const { Server } = await import(`${SDK}/server/index.js`);
+  const { StdioServerTransport } = await import(`${SDK}/server/stdio.js`);
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import(`${SDK}/types.js`);
+  
+  const mcp = new ShiprocketMCP();
+  
+  const server = new Server(
+    { name: "lanework-shiprocket", version: "1.0.0" },
+    { capabilities: { tools: {} } }
+  );
+  
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      {
+        name: "track_shipment",
+        description: "Track any shipment by AWB across all Indian carriers. Returns real-time status, location, and scan history.",
+        inputSchema: {
+          type: "object",
+          properties: { awb: { type: "string", description: "AWB/Tracking number" } },
+          required: ["awb"],
         },
-        required: ["orderId", "pickupPincode", "deliveryPincode", "weight", "customerName", "customerPhone", "customerAddress"],
       },
-    },
-    {
-      name: "get_rates",
-      description: "Compare shipping rates across all available carriers for a given route and weight.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          pickupPincode: { type: "string" },
-          deliveryPincode: { type: "string" },
-          weight: { type: "number" },
+      {
+        name: "create_shipment",
+        description: "Book a shipment with the best carrier. Returns AWB, courier name, and label URL.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            orderId: { type: "string" },
+            pickupPincode: { type: "string" },
+            deliveryPincode: { type: "string" },
+            weight: { type: "number" },
+            length: { type: "number" },
+            breadth: { type: "number" },
+            height: { type: "number" },
+            paymentMode: { type: "string", enum: ["prepaid", "cod"] },
+            codAmount: { type: "number" },
+            customerName: { type: "string" },
+            customerPhone: { type: "string" },
+            customerAddress: { type: "string" },
+            customerEmail: { type: "string" },
+          },
+          required: ["orderId", "pickupPincode", "deliveryPincode", "weight", "customerName", "customerPhone", "customerAddress"],
         },
-        required: ["pickupPincode", "deliveryPincode", "weight"],
       },
-    },
-    {
-      name: "cancel_shipment",
-      description: "Cancel a shipment and get refund.",
-      inputSchema: {
-        type: "object",
-        properties: { awb: { type: "string" } },
-        required: ["awb"],
+      {
+        name: "get_rates",
+        description: "Compare shipping rates across all available carriers for a given route and weight.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            pickupPincode: { type: "string" },
+            deliveryPincode: { type: "string" },
+            weight: { type: "number" },
+          },
+          required: ["pickupPincode", "deliveryPincode", "weight"],
+        },
       },
-    },
-  ],
-}));
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-  await mcp.init();
-
-  try {
-    let result: any;
-    switch (name) {
-      case "track_shipment": result = await mcp.trackShipment(args.awb as string); break;
-      case "create_shipment": result = await mcp.bookShipment(args as any); break;
-      case "get_rates": result = await mcp.getRates(args.pickupPincode as string, args.deliveryPincode as string, args.weight as number); break;
-      case "cancel_shipment": result = await mcp.cancelShipment(args.awb as string); break;
-      default: throw new Error(`Unknown tool: ${name}`);
+      {
+        name: "cancel_shipment",
+        description: "Cancel a shipment and get refund.",
+        inputSchema: {
+          type: "object",
+          properties: { awb: { type: "string" } },
+          required: ["awb"],
+        },
+      },
+    ],
+  }));
+  
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+    await mcp.init();
+  
+    try {
+      let result: any;
+      switch (name) {
+        case "track_shipment": result = await mcp.trackShipment(args.awb as string); break;
+        case "create_shipment": result = await mcp.bookShipment(args as any); break;
+        case "get_rates": result = await mcp.getRates(args.pickupPincode as string, args.deliveryPincode as string, args.weight as number); break;
+        case "cancel_shipment": result = await mcp.cancelShipment(args.awb as string); break;
+        default: throw new Error(`Unknown tool: ${name}`);
+      }
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (e: any) {
+      return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true };
     }
-    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-  } catch (e: any) {
-    return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true };
-  }
-});
+  });
+  
+  const transport = new StdioServerTransport();
+  await mcp.init();
+  await server.connect(transport);
+  console.error("[ShiprocketMCP] Ready — 4 tools available");
+  
+}
 
-const transport = new StdioServerTransport();
-await mcp.init();
-await server.connect(transport);
-console.error("[ShiprocketMCP] Ready — 4 tools available");
+// Run only when executed directly (tsx index.ts), not when imported by the app.
+if (isDirectRun(import.meta.url)) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

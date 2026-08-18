@@ -3,11 +3,8 @@ import { NextResponse } from "next/server";
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default";
-
     const customers = await sql`
       SELECT * FROM customers ORDER BY created_at DESC
     `;
@@ -22,21 +19,21 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { customerName, channel, status, userId } = body;
+    const { name, customerName, email, phone, status } = body;
 
-    if (!customerName) {
+    const customerNameVal = name || customerName;
+    if (!customerNameVal) {
       return NextResponse.json(
-        { error: "Missing required field: customerName" },
+        { error: "Missing required field: name" },
         { status: 400 }
       );
     }
 
     const id = crypto.randomUUID();
-    const user_id = userId || "default";
 
     await sql`
-      INSERT INTO customers (id, customer_name, channel, status)
-      VALUES (${id}, ${customerName}, ${channel || null}, ${status || "active"})
+      INSERT INTO customers (id, name, email, phone, status)
+      VALUES (${id}, ${customerNameVal}, ${email || null}, ${phone || null}, ${status || "active"})
     `;
 
     const [customer] = await sql`

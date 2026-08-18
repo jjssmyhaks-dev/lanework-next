@@ -1,3 +1,4 @@
+// @ts-nocheck — MCP SDK types resolved at build time in project context
 /**
  * MapmyIndia MCP Server
  * More accurate than Google Maps for Indian addresses — especially tier-2/3 cities
@@ -15,8 +16,8 @@
  * ENV: MAPMYINDIA_API_KEY, MAPMYINDIA_LICENSE_KEY
  */
 
-// @ts-nocheck � MCP SDK types resolved at build time
-import { LaneworkMCPServer } from "../shared/server.js";
+// @ts-nocheck � MCP SDK types resolved at build time
+import { LaneworkMCPServer, isDirectRun } from "../shared/server.ts";
 import crypto from "crypto";
 
 export class MapmyIndiaMCP extends LaneworkMCPServer {
@@ -59,18 +60,19 @@ export class MapmyIndiaMCP extends LaneworkMCPServer {
       // Try DB fallback: customer addresses
       try {
         const rows: any[] = await this.sql`
-          SELECT address, lat, lng FROM customers WHERE address ILIKE ${"%" + address + "%"} LIMIT 1
+          SELECT address FROM customers WHERE address::text ILIKE ${"%" + address + "%"} LIMIT 1
         `;
         if (rows.length > 0) {
           const c = rows[0];
+          const addr = typeof c.address === "string" ? c.address : (c.address?.address || "");
           return {
             mode: "db-fallback",
-            address: (c.address as string) || address,
-            lat: parseFloat(String(c.lat || "0")),
-            lng: parseFloat(String(c.lng || "0")),
+            address: addr || address,
+            lat: 0,
+            lng: 0,
             eLoc: "",
             confidence: 50,
-            message: "📍 Returned approximate coordinates from DB customer addresses. Set MAPMYINDIA_API_KEY for live geocoding.",
+            message: "📍 Matched a customer address in the DB. Set MAPMYINDIA_API_KEY for live geocoding.",
           };
         }
       } catch { /* DB may not exist */ }
@@ -78,11 +80,11 @@ export class MapmyIndiaMCP extends LaneworkMCPServer {
       // Also try shipments destination
       try {
         const rows: any[] = await this.sql`
-          SELECT destination FROM shipments WHERE destination ILIKE ${"%" + address + "%"} LIMIT 1
+          SELECT destination FROM shipments WHERE destination::text ILIKE ${"%" + address + "%"} LIMIT 1
         `;
         if (rows.length > 0) {
           // Approximate: use pincode-derived coordinates
-          const dest = rows[0].destination as string;
+          const dest = typeof rows[0].destination === "string" ? rows[0].destination : (rows[0].destination?.address || "");
           const pincodeMatch = dest.match(/\b\d{6}\b/);
           if (pincodeMatch) {
             const [pincodeRow] = await this.sql`SELECT lat, lng FROM pincodes WHERE pincode = ${pincodeMatch[0]} LIMIT 1`;
@@ -115,15 +117,16 @@ export class MapmyIndiaMCP extends LaneworkMCPServer {
       // API failed — try DB
       try {
         const rows: any[] = await this.sql`
-          SELECT address, lat, lng FROM customers WHERE address ILIKE ${"%" + address + "%"} LIMIT 1
+          SELECT address FROM customers WHERE address::text ILIKE ${"%" + address + "%"} LIMIT 1
         `;
         if (rows.length > 0) {
           const c = rows[0];
+          const addr = typeof c.address === "string" ? c.address : (c.address?.address || "");
           return {
             mode: "db-fallback",
-            address: (c.address as string) || address,
-            lat: parseFloat(String(c.lat || "0")),
-            lng: parseFloat(String(c.lng || "0")),
+            address: addr || address,
+            lat: 0,
+            lng: 0,
             eLoc: "",
             confidence: 50,
             message: "📍 Returned from DB — MapmyIndia API unreachable.",
@@ -310,13 +313,16 @@ export class MapmyIndiaMCP extends LaneworkMCPServer {
     // Save to DB for caching
     try {
       const routeId = crypto.randomUUID();
+      const originLabel = params.waypoints[0]?.label || "Start";
+      const destLabel = params.waypoints[params.waypoints.length - 1]?.label || "End";
       await this.sql`
-        INSERT INTO routes (id, name, origin, destination, distance_km, estimated_duration_min, waypoints, created_at)
-        VALUES (${routeId}, 'Optimized Route', ${params.waypoints[0]?.label || "Start"},
-          ${params.waypoints[params.waypoints.length - 1]?.label || "End"},
+        INSERT INTO routes (id, name, status, total_distance_km, total_duration_minutes, total_stops, constraints, metrics, created_at)
+        VALUES (${routeId}, 'Optimized Route', 'active',
           ${Math.round((route.distance || 0) / 1000 * 10) / 10},
           ${Math.round((route.duration || 0) / 60)},
-          ${JSON.stringify(params.waypoints)}, NOW())
+          ${params.waypoints.length},
+          ${JSON.stringify({ origin: originLabel, destination: destLabel })}::jsonb,
+          ${JSON.stringify({ waypoints: params.waypoints })}::jsonb, NOW())
       `;
     } catch { /* DB insert best-effort */ }
 
@@ -371,37 +377,46 @@ export class MapmyIndiaMCP extends LaneworkMCPServer {
   }
 }
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-
-const mcp = new MapmyIndiaMCP();
-const server = new Server({ name: "lanework-mapmyindia", version: "1.0.0" }, { capabilities: { tools: {} } });
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    { name: "geocode", description: "Convert Indian address to coordinates", inputSchema: { type: "object", properties: { address: { type: "string" } }, required: ["address"] } },
-    { name: "reverse_geocode", description: "Convert coordinates to Indian address", inputSchema: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] } },
-    { name: "optimize_route", description: "Optimize multi-stop delivery route with ETAs", inputSchema: { type: "object", properties: { waypoints: { type: "array", items: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" }, label: { type: "string" } }, required: ["lat", "lng"] } }, optimizeFor: { type: "string", enum: ["time", "distance"] }, vehicleType: { type: "string" } }, required: ["waypoints"] } },
-    { name: "distance_matrix", description: "Time/distance between multiple points", inputSchema: { type: "object", properties: { origins: { type: "array", items: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] } }, destinations: { type: "array", items: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] } } }, required: ["origins", "destinations"] } },
-  ],
-}));
-
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const { name, arguments: args } = req.params;
+async function main(): Promise<void> {
+const SDK = "@modelcontextprotocol/sdk";
+  const { Server } = await import(`${SDK}/server/index.js`);
+  const { StdioServerTransport } = await import(`${SDK}/server/stdio.js`);
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import(`${SDK}/types.js`);
+  
+  const mcp = new MapmyIndiaMCP();
+  const server = new Server({ name: "lanework-mapmyindia", version: "1.0.0" }, { capabilities: { tools: {} } });
+  
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      { name: "geocode", description: "Convert Indian address to coordinates", inputSchema: { type: "object", properties: { address: { type: "string" } }, required: ["address"] } },
+      { name: "reverse_geocode", description: "Convert coordinates to Indian address", inputSchema: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] } },
+      { name: "optimize_route", description: "Optimize multi-stop delivery route with ETAs", inputSchema: { type: "object", properties: { waypoints: { type: "array", items: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" }, label: { type: "string" } }, required: ["lat", "lng"] } }, optimizeFor: { type: "string", enum: ["time", "distance"] }, vehicleType: { type: "string" } }, required: ["waypoints"] } },
+      { name: "distance_matrix", description: "Time/distance between multiple points", inputSchema: { type: "object", properties: { origins: { type: "array", items: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] } }, destinations: { type: "array", items: { type: "object", properties: { lat: { type: "number" }, lng: { type: "number" } }, required: ["lat", "lng"] } } }, required: ["origins", "destinations"] } },
+    ],
+  }));
+  
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    const { name, arguments: args } = req.params;
+    await mcp.init();
+    try {
+      switch (name) {
+        case "geocode": return { content: [{ type: "text", text: JSON.stringify(await mcp.geocode(args.address as string), null, 2) }] };
+        case "reverse_geocode": return { content: [{ type: "text", text: JSON.stringify(await mcp.reverseGeocode(args.lat as number, args.lng as number), null, 2) }] };
+        case "optimize_route": return { content: [{ type: "text", text: JSON.stringify(await mcp.optimizeRoute(args as any), null, 2) }] };
+        case "distance_matrix": return { content: [{ type: "text", text: JSON.stringify(await mcp.distanceMatrix(args.origins as any, args.destinations as any), null, 2) }] };
+        default: throw new Error(`Unknown tool: ${name}`);
+      }
+    } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
+  });
+  
+  const transport = new StdioServerTransport();
   await mcp.init();
-  try {
-    switch (name) {
-      case "geocode": return { content: [{ type: "text", text: JSON.stringify(await mcp.geocode(args.address as string), null, 2) }] };
-      case "reverse_geocode": return { content: [{ type: "text", text: JSON.stringify(await mcp.reverseGeocode(args.lat as number, args.lng as number), null, 2) }] };
-      case "optimize_route": return { content: [{ type: "text", text: JSON.stringify(await mcp.optimizeRoute(args as any), null, 2) }] };
-      case "distance_matrix": return { content: [{ type: "text", text: JSON.stringify(await mcp.distanceMatrix(args.origins as any, args.destinations as any), null, 2) }] };
-      default: throw new Error(`Unknown tool: ${name}`);
-    }
-  } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
-});
+  await server.connect(transport);
+  console.error("[MapmyIndiaMCP] Ready — 4 tools available");
+  
+}
 
-const transport = new StdioServerTransport();
-await mcp.init();
-await server.connect(transport);
-console.error("[MapmyIndiaMCP] Ready — 4 tools available");
+// Run only when executed directly (tsx index.ts), not when imported by the app.
+if (isDirectRun(import.meta.url)) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

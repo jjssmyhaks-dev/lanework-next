@@ -18,42 +18,54 @@ export async function GET(request: NextRequest) {
     let rows: any[] = [];
     let headers: string[] = [];
 
+    /** Readable string from a jsonb address cell */
+    const addr = (v: any): string => {
+      if (v == null) return "";
+      if (typeof v === "string") return v;
+      if (typeof v === "object") return v.address || v.city || v.name || JSON.stringify(v);
+      return String(v);
+    };
+
     switch (entity) {
       case "shipments": {
         let query = sql`SELECT * FROM shipments`;
         if (status) query = sql`SELECT * FROM shipments WHERE status = ${status}`;
         rows = await sql`SELECT * FROM shipments LIMIT ${limit}`;
-        headers = ["id", "tracking_number", "carrier", "status", "origin", "destination", "estimated_delivery", "customer_name", "customer_phone", "created_at"];
+        headers = ["id", "tracking_number", "order_number", "carrier", "status", "origin", "destination", "estimated_delivery", "customer_name", "customer_phone", "created_at"];
+        rows = rows.map((r: any) => ({ ...r, origin: addr(r.origin), destination: addr(r.destination) }));
         break;
       }
       case "inventory": {
         rows = await sql`SELECT * FROM inventory LIMIT ${limit}`;
-        headers = ["id", "sku", "name", "category", "quantity", "unit", "warehouse_id", "reorder_point", "reorder_quantity", "updated_at"];
+        headers = ["id", "sku", "name", "quantity", "reorder_point", "warehouse", "location", "created_at"];
         break;
       }
       case "orders": {
         rows = await sql`SELECT * FROM orders LIMIT ${limit}`;
-        headers = ["id", "order_number", "customer_name", "status", "total_amount", "created_at"];
+        headers = ["id", "order_number", "status", "total_amount", "payment_mode", "external_id", "created_at"];
+        rows = rows.map((r: any) => ({ ...r, items: JSON.stringify(r.items || []) }));
         break;
       }
       case "routes": {
         rows = await sql`SELECT * FROM routes LIMIT ${limit}`;
-        headers = ["id", "name", "origin", "destination", "distance_km", "estimated_duration_min", "status", "driver_id", "vehicle_id", "created_at"];
+        rows = rows.map((r: any) => ({ ...r, origin: (r.constraints || {}).origin, destination: (r.constraints || {}).destination }));
+        headers = ["id", "name", "origin", "destination", "total_distance_km", "total_duration_minutes", "total_stops", "driver_name", "vehicle_name", "status", "created_at"];
         break;
       }
       case "drivers": {
         rows = await sql`SELECT * FROM drivers LIMIT ${limit}`;
-        headers = ["id", "name", "phone", "license_number", "status", "vehicle_id", "assigned_route_id"];
+        headers = ["id", "name", "phone", "email", "license_number", "license_state", "license_expiry", "status", "created_at"];
         break;
       }
       case "vehicles": {
         rows = await sql`SELECT * FROM vehicles LIMIT ${limit}`;
-        headers = ["id", "registration", "type", "capacity_kg", "status", "last_maintenance_date"];
+        headers = ["id", "name", "license_plate", "vehicle_type", "status", "odometer", "fuel_type", "registration", "last_seen_at", "created_at"];
         break;
       }
       case "customers": {
         rows = await sql`SELECT * FROM customers LIMIT ${limit}`;
-        headers = ["id", "name", "email", "phone", "company", "address", "created_at"];
+        headers = ["id", "name", "email", "phone", "whatsapp_phone", "account_number", "status", "tags", "created_at"];
+        rows = rows.map((r: any) => ({ ...r, address: addr(r.address), tags: Array.isArray(r.tags) ? r.tags.join("; ") : r.tags }));
         break;
       }
       default:

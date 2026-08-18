@@ -3,13 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 const sql = neon(process.env.DATABASE_URL!);
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    const [driver] = await sql`SELECT * FROM drivers WHERE id = ${id}`;
+    const [driver] = await sql`SELECT * FROM fleet_drivers WHERE id = ${id}`;
     if (!driver) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(driver);
   } catch (error: unknown) {
@@ -23,17 +26,21 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
     const body = await request.json();
     const { name, license, status, hoursDriven, maxHours, assignedVehicle } = body;
-    const [existing] = await sql`SELECT * FROM drivers WHERE id = ${id}`;
+    const [existing] = await sql`SELECT * FROM fleet_drivers WHERE id = ${id}`;
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const [updated] = await sql`
-      UPDATE drivers SET
-        name = ${name ?? existing.name}, license = ${license ?? existing.license},
-        status = ${status ?? existing.status}, hours_driven = ${hoursDriven ?? existing.hours_driven},
-        max_hours = ${maxHours ?? existing.max_hours}, assigned_vehicle = ${assignedVehicle ?? existing.assigned_vehicle},
+      UPDATE fleet_drivers SET
+        name = ${name ?? existing.name},
+        license = ${license ?? existing.license},
+        status = ${status ?? existing.status},
+        hours_driven = ${hoursDriven ?? existing.hours_driven},
+        max_hours = ${maxHours ?? existing.max_hours},
+        assigned_vehicle = ${assignedVehicle ?? existing.assigned_vehicle},
         updated_at = NOW()
       WHERE id = ${id} RETURNING *
     `;
@@ -45,12 +52,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    await sql`DELETE FROM drivers WHERE id = ${id}`;
+    await sql`DELETE FROM fleet_drivers WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";

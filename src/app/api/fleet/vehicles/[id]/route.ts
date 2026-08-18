@@ -3,13 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 
 const sql = neon(process.env.DATABASE_URL!);
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    const [vehicle] = await sql`SELECT * FROM vehicles WHERE id = ${id}`;
+    const [vehicle] = await sql`SELECT * FROM fleet_vehicles WHERE id = ${id}`;
     if (!vehicle) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(vehicle);
   } catch (error: unknown) {
@@ -23,16 +26,19 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
     const body = await request.json();
     const { plate, type, status, mileageKm } = body;
-    const [existing] = await sql`SELECT * FROM vehicles WHERE id = ${id}`;
+    const [existing] = await sql`SELECT * FROM fleet_vehicles WHERE id = ${id}`;
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const [updated] = await sql`
-      UPDATE vehicles SET
-        plate = ${plate ?? existing.plate}, type = ${type ?? existing.type},
-        status = ${status ?? existing.status}, mileage_km = ${mileageKm ?? existing.mileage_km},
+      UPDATE fleet_vehicles SET
+        plate = ${plate ?? existing.plate},
+        type = ${type ?? existing.type},
+        status = ${status ?? existing.status},
+        mileage_km = ${mileageKm ?? existing.mileage_km},
         updated_at = NOW()
       WHERE id = ${id} RETURNING *
     `;
@@ -44,12 +50,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    await sql`DELETE FROM vehicles WHERE id = ${id}`;
+    await sql`DELETE FROM fleet_vehicles WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";

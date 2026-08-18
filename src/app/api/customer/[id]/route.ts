@@ -1,15 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { NextRequest, NextResponse } from "next/server";
 
 const sql = neon(process.env.DATABASE_URL!);
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    const [row] = await sql`SELECT * FROM conversations WHERE id = ${id}`;
+    const [row] = await sql`SELECT * FROM customers WHERE id = ${id}`;
     if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(row);
   } catch (error: unknown) {
@@ -23,18 +26,19 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
     const body = await request.json();
-    const { customerName, channel, status, sentiment } = body;
-    const [existing] = await sql`SELECT * FROM conversations WHERE id = ${id}`;
+    const { name, customerName, email, phone, status } = body;
+    const [existing] = await sql`SELECT * FROM customers WHERE id = ${id}`;
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const [updated] = await sql`
-      UPDATE conversations SET
-        customer_name = ${customerName ?? existing.customer_name},
-        channel = ${channel ?? existing.channel},
+      UPDATE customers SET
+        name = ${(name || customerName) ?? existing.name},
+        email = ${email ?? existing.email},
+        phone = ${phone ?? existing.phone},
         status = ${status ?? existing.status},
-        sentiment = ${sentiment ?? existing.sentiment},
         updated_at = NOW()
       WHERE id = ${id} RETURNING *
     `;
@@ -46,12 +50,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    await sql`DELETE FROM conversations WHERE id = ${id}`;
+    await sql`DELETE FROM customers WHERE id = ${id}`;
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";

@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  // MCP SDK is only needed when the standalone MCP servers run (mcp-servers/*);
+  // keep it external so the app never bundles or resolves it at build time.
+  serverExternalPackages: ["@modelcontextprotocol/sdk"],
   // Security headers
   async headers() {
     return [

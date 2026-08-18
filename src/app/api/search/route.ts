@@ -78,7 +78,8 @@ export async function POST(request: Request) {
                 COALESCE(s.tracking_number, '') || ' ' ||
                 COALESCE(s.carrier, '') || ' ' ||
                 COALESCE(s.status, '') || ' ' ||
-                COALESCE(s.destination, '') || ' ' ||
+                COALESCE(s.destination->>'address', '') || ' ' ||
+                COALESCE(s.destination::text, '') || ' ' ||
                 COALESCE(s.customer_name, '')
               ),
               to_tsquery('english', ${tsQuery})
@@ -89,7 +90,8 @@ export async function POST(request: Request) {
               COALESCE(s.tracking_number, '') || ' ' ||
               COALESCE(s.carrier, '') || ' ' ||
               COALESCE(s.status, '') || ' ' ||
-              COALESCE(s.destination, '') || ' ' ||
+              COALESCE(s.destination->>'address', '') || ' ' ||
+              COALESCE(s.destination::text, '') || ' ' ||
               COALESCE(s.customer_name, '')
             ) @@ to_tsquery('english', ${tsQuery})
           ORDER BY relevance DESC
@@ -99,7 +101,7 @@ export async function POST(request: Request) {
             type: "shipments" as SearchType,
             id: r.id,
             title: r.tracking_number,
-            description: `${r.carrier || "—"} · ${r.status} · ${r.destination || r.customer_name || "—"}`,
+            description: `${r.carrier || "—"} · ${r.status} · ${typeof r.destination === "string" ? r.destination : (r.destination?.address || "") || r.customer_name || "—"}`,
             href: `/shipment`,
             relevance: Number(r.relevance),
           }))
@@ -164,7 +166,7 @@ export async function POST(request: Request) {
                 COALESCE(c.name, '') || ' ' ||
                 COALESCE(c.phone, '') || ' ' ||
                 COALESCE(c.email, '') || ' ' ||
-                COALESCE(c.address, '')
+                COALESCE(c.address::text, '')
               ),
               to_tsquery('english', ${tsQuery})
             ) AS relevance
@@ -174,7 +176,7 @@ export async function POST(request: Request) {
               COALESCE(c.name, '') || ' ' ||
               COALESCE(c.phone, '') || ' ' ||
               COALESCE(c.email, '') || ' ' ||
-              COALESCE(c.address, '')
+              COALESCE(c.address::text, '')
             ) @@ to_tsquery('english', ${tsQuery})
           ORDER BY relevance DESC
           LIMIT ${MAX_RESULTS}
@@ -183,7 +185,7 @@ export async function POST(request: Request) {
             type: "customers" as SearchType,
             id: r.id,
             title: r.name,
-            description: [r.phone, r.email, r.address].filter(Boolean).join(" · ") || "—",
+            description: [r.phone, r.email, typeof r.address === "string" ? r.address : JSON.stringify(r.address || "")].filter(Boolean).join(" · ") || "—",
             href: `/customer`,
             relevance: Number(r.relevance),
           }))

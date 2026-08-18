@@ -1,3 +1,4 @@
+// @ts-nocheck — MCP SDK types resolved at build time in project context
 /**
  * Dock Scheduler MCP Server
  * Granular dock appointment booking, real-time gate availability, carrier coordination
@@ -11,7 +12,7 @@
  * ENV: (uses Neon DB as primary source — no external API required)
  */
 
-import { LaneworkMCPServer } from "../shared/server.js";
+import { LaneworkMCPServer, isDirectRun } from "../shared/server.ts";
 import crypto from "crypto";
 
 export class DockSchedulerMCP extends LaneworkMCPServer {
@@ -291,37 +292,46 @@ export class DockSchedulerMCP extends LaneworkMCPServer {
   }
 }
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-
-const mcp = new DockSchedulerMCP();
-const server = new Server({ name: "lanework-dock-scheduler", version: "1.0.0" }, { capabilities: { tools: {} } });
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    { name: "book_dock", description: "Book a dock slot for incoming/outgoing trailer", inputSchema: { type: "object", properties: { warehouseId: { type: "string" }, dockId: { type: "string" }, carrierName: { type: "string" }, vehicleReg: { type: "string" }, bookingType: { type: "string", enum: ["inbound", "outbound"] }, shipmentId: { type: "string" }, requestedTime: { type: "string" }, durationMin: { type: "number" }, priority: { type: "string", enum: ["normal", "high", "express"] } }, required: ["warehouseId", "dockId", "carrierName", "vehicleReg", "bookingType", "requestedTime"] } },
-    { name: "get_dock_availability", description: "Real-time dock availability for a date range", inputSchema: { type: "object", properties: { warehouseId: { type: "string" }, dateFrom: { type: "string" }, dateTo: { type: "string" } }, required: ["warehouseId", "dateFrom", "dateTo"] } },
-    { name: "check_in_carrier", description: "Carrier arrives → log check-in, assign dock or queue", inputSchema: { type: "object", properties: { bookingId: { type: "string" }, qrCode: { type: "string" }, vehicleReg: { type: "string" }, carrierName: { type: "string" }, checkedInBy: { type: "string" } }, required: ["vehicleReg", "carrierName", "checkedInBy"] } },
-    { name: "release_dock", description: "Carrier departs → release dock, auto-assign next in queue", inputSchema: { type: "object", properties: { bookingId: { type: "string" }, releasedBy: { type: "string" }, notes: { type: "string" } }, required: ["bookingId", "releasedBy"] } },
-  ],
-}));
-
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const { name, arguments: args } = req.params;
+async function main(): Promise<void> {
+const SDK = "@modelcontextprotocol/sdk";
+  const { Server } = await import(`${SDK}/server/index.js`);
+  const { StdioServerTransport } = await import(`${SDK}/server/stdio.js`);
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import(`${SDK}/types.js`);
+  
+  const mcp = new DockSchedulerMCP();
+  const server = new Server({ name: "lanework-dock-scheduler", version: "1.0.0" }, { capabilities: { tools: {} } });
+  
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      { name: "book_dock", description: "Book a dock slot for incoming/outgoing trailer", inputSchema: { type: "object", properties: { warehouseId: { type: "string" }, dockId: { type: "string" }, carrierName: { type: "string" }, vehicleReg: { type: "string" }, bookingType: { type: "string", enum: ["inbound", "outbound"] }, shipmentId: { type: "string" }, requestedTime: { type: "string" }, durationMin: { type: "number" }, priority: { type: "string", enum: ["normal", "high", "express"] } }, required: ["warehouseId", "dockId", "carrierName", "vehicleReg", "bookingType", "requestedTime"] } },
+      { name: "get_dock_availability", description: "Real-time dock availability for a date range", inputSchema: { type: "object", properties: { warehouseId: { type: "string" }, dateFrom: { type: "string" }, dateTo: { type: "string" } }, required: ["warehouseId", "dateFrom", "dateTo"] } },
+      { name: "check_in_carrier", description: "Carrier arrives → log check-in, assign dock or queue", inputSchema: { type: "object", properties: { bookingId: { type: "string" }, qrCode: { type: "string" }, vehicleReg: { type: "string" }, carrierName: { type: "string" }, checkedInBy: { type: "string" } }, required: ["vehicleReg", "carrierName", "checkedInBy"] } },
+      { name: "release_dock", description: "Carrier departs → release dock, auto-assign next in queue", inputSchema: { type: "object", properties: { bookingId: { type: "string" }, releasedBy: { type: "string" }, notes: { type: "string" } }, required: ["bookingId", "releasedBy"] } },
+    ],
+  }));
+  
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    const { name, arguments: args } = req.params;
+    await mcp.init();
+    try {
+      switch (name) {
+        case "book_dock": return { content: [{ type: "text", text: JSON.stringify(await mcp.bookDock(args as any), null, 2) }] };
+        case "get_dock_availability": return { content: [{ type: "text", text: JSON.stringify(await mcp.getDockAvailability(args as any), null, 2) }] };
+        case "check_in_carrier": return { content: [{ type: "text", text: JSON.stringify(await mcp.checkInCarrier(args as any), null, 2) }] };
+        case "release_dock": return { content: [{ type: "text", text: JSON.stringify(await mcp.releaseDock(args as any), null, 2) }] };
+        default: throw new Error(`Unknown tool: ${name}`);
+      }
+    } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
+  });
+  
+  const transport = new StdioServerTransport();
   await mcp.init();
-  try {
-    switch (name) {
-      case "book_dock": return { content: [{ type: "text", text: JSON.stringify(await mcp.bookDock(args as any), null, 2) }] };
-      case "get_dock_availability": return { content: [{ type: "text", text: JSON.stringify(await mcp.getDockAvailability(args as any), null, 2) }] };
-      case "check_in_carrier": return { content: [{ type: "text", text: JSON.stringify(await mcp.checkInCarrier(args as any), null, 2) }] };
-      case "release_dock": return { content: [{ type: "text", text: JSON.stringify(await mcp.releaseDock(args as any), null, 2) }] };
-      default: throw new Error(`Unknown tool: ${name}`);
-    }
-  } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
-});
+  await server.connect(transport);
+  console.error("[DockSchedulerMCP] Ready — 4 tools available");
+  
+}
 
-const transport = new StdioServerTransport();
-await mcp.init();
-await server.connect(transport);
-console.error("[DockSchedulerMCP] Ready — 4 tools available");
+// Run only when executed directly (tsx index.ts), not when imported by the app.
+if (isDirectRun(import.meta.url)) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

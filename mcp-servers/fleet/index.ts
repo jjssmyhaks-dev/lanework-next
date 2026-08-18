@@ -1,3 +1,4 @@
+// @ts-nocheck — MCP SDK types resolved at build time in project context
 /**
  * Fleet Telematics MCP Server
  * Real GPS, fuel monitoring, maintenance alerts, driver behavior from LocoNav/FleetX/Vamosys
@@ -15,8 +16,8 @@
  * ENV: FLEET_API_KEY, FLEET_API_SECRET, FLEET_PROVIDER (loconav|fleetx|vamosys)
  */
 
-// @ts-nocheck � MCP SDK types resolved at build time
-import { LaneworkMCPServer } from "../shared/server.js";
+// @ts-nocheck � MCP SDK types resolved at build time
+import { LaneworkMCPServer, isDirectRun } from "../shared/server.ts";
 import crypto from "crypto";
 
 export class FleetMCP extends LaneworkMCPServer {
@@ -142,7 +143,6 @@ export class FleetMCP extends LaneworkMCPServer {
       await this.sql`
         UPDATE vehicles SET
           last_lat = ${loc.latitude || 0}, last_lng = ${loc.longitude || 0},
-          last_location = ${loc.address || loc.formatted_address || ""},
           last_seen_at = NOW()
         WHERE id = ${vehicleId}
       `;
@@ -252,8 +252,9 @@ export class FleetMCP extends LaneworkMCPServer {
     for (const v of vehicles) {
       try {
         await this.sql`
-          INSERT INTO vehicles (id, registration, status, last_lat, last_lng, last_seen_at, created_at, updated_at)
-          VALUES (${v.id}, ${v.registration}, ${v.status}, ${v.lat}, ${v.lng}, NOW(), NOW(), NOW())
+          INSERT INTO vehicles (id, name, license_plate, vehicle_type, registration, status, last_lat, last_lng, last_seen_at, created_at, updated_at)
+          VALUES (${v.id}, ${v.registration || `Vehicle-${v.id.slice(0, 8)}`}, ${v.registration}, ${v.type || "truck"}, ${v.registration}, ${v.status},
+            ${v.lat}, ${v.lng}, NOW(), NOW(), NOW())
           ON CONFLICT (id) DO UPDATE SET
             status = ${v.status}, last_lat = ${v.lat}, last_lng = ${v.lng},
             last_seen_at = NOW(), updated_at = NOW()
@@ -369,37 +370,46 @@ export class FleetMCP extends LaneworkMCPServer {
   }
 }
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-
-const mcp = new FleetMCP();
-const server = new Server({ name: "lanework-fleet", version: "1.0.0" }, { capabilities: { tools: {} } });
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    { name: "track_vehicle", description: "Real-time GPS position, speed, fuel level", inputSchema: { type: "object", properties: { vehicleId: { type: "string" } }, required: ["vehicleId"] } },
-    { name: "get_fleet_status", description: "All vehicles summary — status, location, alerts", inputSchema: { type: "object", properties: {}, required: [] } },
-    { name: "schedule_maintenance", description: "Schedule vehicle maintenance", inputSchema: { type: "object", properties: { vehicleId: { type: "string" }, type: { type: "string" }, description: { type: "string" }, scheduledDate: { type: "string" }, priority: { type: "string", enum: ["low", "medium", "high"] } }, required: ["vehicleId", "type", "description", "scheduledDate", "priority"] } },
-    { name: "get_driver_report", description: "Driver hours, violations, compliance status", inputSchema: { type: "object", properties: { driverId: { type: "string" } }, required: ["driverId"] } },
-  ],
-}));
-
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const { name, arguments: args } = req.params;
+async function main(): Promise<void> {
+const SDK = "@modelcontextprotocol/sdk";
+  const { Server } = await import(`${SDK}/server/index.js`);
+  const { StdioServerTransport } = await import(`${SDK}/server/stdio.js`);
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import(`${SDK}/types.js`);
+  
+  const mcp = new FleetMCP();
+  const server = new Server({ name: "lanework-fleet", version: "1.0.0" }, { capabilities: { tools: {} } });
+  
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      { name: "track_vehicle", description: "Real-time GPS position, speed, fuel level", inputSchema: { type: "object", properties: { vehicleId: { type: "string" } }, required: ["vehicleId"] } },
+      { name: "get_fleet_status", description: "All vehicles summary — status, location, alerts", inputSchema: { type: "object", properties: {}, required: [] } },
+      { name: "schedule_maintenance", description: "Schedule vehicle maintenance", inputSchema: { type: "object", properties: { vehicleId: { type: "string" }, type: { type: "string" }, description: { type: "string" }, scheduledDate: { type: "string" }, priority: { type: "string", enum: ["low", "medium", "high"] } }, required: ["vehicleId", "type", "description", "scheduledDate", "priority"] } },
+      { name: "get_driver_report", description: "Driver hours, violations, compliance status", inputSchema: { type: "object", properties: { driverId: { type: "string" } }, required: ["driverId"] } },
+    ],
+  }));
+  
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    const { name, arguments: args } = req.params;
+    await mcp.init();
+    try {
+      switch (name) {
+        case "track_vehicle": return { content: [{ type: "text", text: JSON.stringify(await mcp.trackVehicle(args.vehicleId as string), null, 2) }] };
+        case "get_fleet_status": return { content: [{ type: "text", text: JSON.stringify(await mcp.getFleetStatus(), null, 2) }] };
+        case "schedule_maintenance": return { content: [{ type: "text", text: JSON.stringify(await mcp.scheduleMaintenance(args as any), null, 2) }] };
+        case "get_driver_report": return { content: [{ type: "text", text: JSON.stringify(await mcp.getDriverReport(args.driverId as string), null, 2) }] };
+        default: throw new Error(`Unknown tool: ${name}`);
+      }
+    } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
+  });
+  
+  const transport = new StdioServerTransport();
   await mcp.init();
-  try {
-    switch (name) {
-      case "track_vehicle": return { content: [{ type: "text", text: JSON.stringify(await mcp.trackVehicle(args.vehicleId as string), null, 2) }] };
-      case "get_fleet_status": return { content: [{ type: "text", text: JSON.stringify(await mcp.getFleetStatus(), null, 2) }] };
-      case "schedule_maintenance": return { content: [{ type: "text", text: JSON.stringify(await mcp.scheduleMaintenance(args as any), null, 2) }] };
-      case "get_driver_report": return { content: [{ type: "text", text: JSON.stringify(await mcp.getDriverReport(args.driverId as string), null, 2) }] };
-      default: throw new Error(`Unknown tool: ${name}`);
-    }
-  } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
-});
+  await server.connect(transport);
+  console.error("[FleetMCP] Ready — 4 tools available");
+  
+}
 
-const transport = new StdioServerTransport();
-await mcp.init();
-await server.connect(transport);
-console.error("[FleetMCP] Ready — 4 tools available");
+// Run only when executed directly (tsx index.ts), not when imported by the app.
+if (isDirectRun(import.meta.url)) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

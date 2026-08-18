@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import crypto from "crypto";
 import { rateLimit, integrationRateLimit } from "@/lib/rate-limit";
+import { callMcpAction } from "@/lib/mcp";
+
+// ── e-way bills table — created lazily so the feature works on fresh DBs ──
+async function ensureEwayBillsTable(sql: any) {
+  await sql`CREATE TABLE IF NOT EXISTS eway_bills (
+    id UUID PRIMARY KEY,
+    ewb_no TEXT,
+    shipment_id UUID,
+    status TEXT DEFAULT 'generated',
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+  )`;
+  try { await sql`CREATE UNIQUE INDEX IF NOT EXISTS eway_bills_ewb_no_key ON eway_bills (ewb_no)`; } catch { /* index may already exist */ }
+}
 
 // ── Shiprocket auth helper (token cached per process; auth only when needed) ──
 let _shiprocketToken: { token: string; expiresAt: number } | null = null;
@@ -85,6 +99,16 @@ export async function POST(
 }
 
 async function routeAction(type: string, action: string, config: any, sql: any, payload: any): Promise<any> {
+  // ── MCP servers first: the standalone mcp-servers/* code is the reference
+  // implementation for the integrations it covers. Falls back to inline logic
+  // for integrations without an MCP server (razorpay, whatsapp, csv, webhooks).
+  try {
+    const mcpResult = await callMcpAction(type, action, payload);
+    if (mcpResult) return mcpResult;
+  } catch (e: any) {
+    console.warn(`[action] MCP dispatch failed for ${type}/${action}, using inline:`, e);
+  }
+
   switch (type) {
     // ── CSV / Import-Export ──
     case "csv_import":
@@ -166,7 +190,7 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
       }
       if (action === "view_log") {
         const msgs = await sql`SELECT * FROM whatsapp_messages ORDER BY created_at DESC LIMIT 10`;
-        return { success: true, mode: "db-fallback", messages: msgs.map((m: any) => ({ to: m.recipient, status: m.status, sentAt: m.created_at })), count: msgs.length };
+        return { success: true, mode: "db-fallback", messages: msgs.map((m: any) => ({ to: m.to_number || m.toNumber, direction: m.direction, status: m.status, sentAt: m.created_at })), count: msgs.length };
       }
       break;
 
@@ -408,14 +432,14 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
               items.push({ name: match[1].trim(), closingBalance: match[2].trim() });
             }
 
-            // Upsert to inventory table
+            // Upsert to inventory_items table
             let upserted = 0;
             for (const item of items) {
               try {
                 await sql`
-                  INSERT INTO inventory (item_name, quantity, updated_at)
-                  VALUES (${item.name}, ${parseFloat(item.closingBalance) || 0}, NOW())
-                  ON CONFLICT (item_name) DO UPDATE SET quantity = ${parseFloat(item.closingBalance) || 0}, updated_at = NOW()
+                  INSERT INTO inventory_items (id, sku, name, quantity_on_hand, quantity_available, unit_of_measure, last_updated)
+                  VALUES (${crypto.randomUUID()}, ${item.name.toUpperCase().replace(/\s+/g, "-")}, ${item.name}, ${parseFloat(item.closingBalance) || 0}, ${parseFloat(item.closingBalance) || 0}, 'pcs', NOW())
+                  ON CONFLICT (id) DO NOTHING
                 `;
                 upserted++;
               } catch {
@@ -440,7 +464,7 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
             return {
               success: true,
               mode: "db-fallback",
-              inventory: dbItems.map((i: any) => ({ item_name: i.item_name, quantity: i.quantity, updated_at: i.updated_at })),
+              inventory: dbItems.map((i: any) => ({ item_name: i.name || i.item_name, quantity: i.quantity, updated_at: i.updated_at })),
               message: `TallyPrime sync failed (${err.message}). Showing cached inventory from database.`,
             };
           }
@@ -451,7 +475,7 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
         return {
           success: true,
           mode: "db-fallback",
-          inventory: dbItems.map((i: any) => ({ item_name: i.item_name, quantity: i.quantity, updated_at: i.updated_at })),
+          inventory: dbItems.map((i: any) => ({ item_name: i.name || i.item_name, quantity: i.quantity, updated_at: i.updated_at })),
           count: dbItems.length,
           message: "TallyPrime inventory from local database. Set TALLY_REST_URL in Vercel env vars for live sync from Tally.",
           hint: "Set TALLY_REST_URL to your TallyPrime REST server URL (e.g., http://192.168.1.100:9000).",
@@ -525,7 +549,8 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
           });
           const data = await res.json();
           if (res.ok && data.ewayBillNo) {
-            await sql`INSERT INTO eway_bills (ewb_no, shipment_id, status, created_at) VALUES (${data.ewayBillNo}, ${shipment.id}, 'generated', NOW()) ON CONFLICT DO NOTHING`;
+            await ensureEwayBillsTable(sql);
+            await sql`INSERT INTO eway_bills (id, ewb_no, shipment_id, status, created_at) VALUES (${crypto.randomUUID()}, ${data.ewayBillNo}, ${shipment.id}, 'generated', NOW()) ON CONFLICT DO NOTHING`;
             return { success: true, mode: "live", eway_bill_no: data.ewayBillNo, eway_bill_date: data.ewayBillDate, valid_until: data.validUpto, message: `E-Way Bill ${data.ewayBillNo} generated successfully!` };
           }
           return { success: true, mode: "live", gstn_response: data, message: `GSTN E-Way Bill API returned status ${res.status}. ${data.error?.message || ""}` };
@@ -585,6 +610,7 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
         };
       }
       if (action === "view_ewb") {
+        await ensureEwayBillsTable(sql);
         const ewbs = await sql`SELECT * FROM eway_bills ORDER BY created_at DESC LIMIT 5`;
         return { success: true, mode: "db-fallback", eway_bills: ewbs.map((e: any) => ({ ewb_no: e.ewb_no, status: e.status, created_at: e.created_at })), count: ewbs.length };
       }
@@ -788,12 +814,26 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
         };
       }
       if (action === "maintenance_check") {
-        const due = await sql`SELECT * FROM vehicles WHERE maintenance_due_date < NOW() + INTERVAL '7 days' ORDER BY maintenance_due_date ASC LIMIT 10`;
-        return { success: true, mode: "db-fallback", maintenance_due: due.map((v: any) => ({ registration: v.registration, due_date: v.maintenance_due_date })), count: due.length, message: due.length > 0 ? `${due.length} vehicles due for maintenance within 7 days. ⚠️` : "All vehicles up to date on maintenance. ✅" };
+        // Live vehicles table has no maintenance_due_date column — report what we can
+        const vehicles = await sql`SELECT * FROM vehicles ORDER BY created_at DESC LIMIT 10`;
+        return {
+          success: true,
+          mode: "db-fallback",
+          vehicles: vehicles.map((v: any) => ({
+            registration: v.license_plate || v.registration || v.name,
+            status: v.status,
+            odometer: v.odometer || 0,
+            last_seen: v.last_seen_at,
+          })),
+          count: vehicles.length,
+          message: vehicles.length > 0
+            ? `${vehicles.length} vehicles in fleet. Maintenance tracking requires odometer/service data — connect ${fleetProvider} for live maintenance alerts.`
+            : "No vehicles in fleet. Add vehicles in Fleet Management.",
+        };
       }
       if (action === "driver_report") {
         const drivers = await sql`SELECT * FROM drivers ORDER BY created_at DESC LIMIT 10`;
-        return { success: true, mode: "db-fallback", drivers: drivers.map((d: any) => ({ name: d.name, license: d.license_number, hours_today: d.hours_today || 0, compliance: d.hours_today > 12 ? "⚠️ Over limit" : "✅ OK" })), count: drivers.length };
+        return { success: true, mode: "db-fallback", drivers: drivers.map((d: any) => ({ name: d.name, license: d.license_number, status: d.status, phone: d.phone || "—" })), count: drivers.length };
       }
       break;
     }
@@ -824,7 +864,7 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
           if (res.ok && data.orders) {
             for (const o of data.orders) {
               try {
-                await sql`INSERT INTO orders (id, external_id, customer_name, total_amount, status, created_at) VALUES (${crypto.randomUUID()}, ${String(o.id)}, ${(o.customer?.first_name || "") + " " + (o.customer?.last_name || "") || "Shopify Customer"}, ${parseFloat(o.total_price || "0")}, ${o.financial_status || "pending"}, ${o.created_at || new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
+                await sql`INSERT INTO orders (id, external_id, order_number, total_amount, status, items, created_at) VALUES (${crypto.randomUUID()}, ${String(o.id)}, ${String(o.name || o.order_number || "")}, ${parseFloat(o.total_price || "0")}, ${o.financial_status || "pending"}, ${JSON.stringify({ customer_name: (o.customer?.first_name || "") + " " + (o.customer?.last_name || "") || "Shopify Customer" })}::jsonb, ${o.created_at || new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
               } catch { /* skip individual imports */ }
             }
             const [count] = await sql`SELECT COUNT(*) as c FROM orders WHERE external_id IS NOT NULL`;
@@ -896,7 +936,7 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
             for (const item of data) {
               try {
                 if (action === "sync_orders") {
-                  await sql`INSERT INTO orders (id, external_id, customer_name, total_amount, status, created_at) VALUES (${crypto.randomUUID()}, ${String(item.id)}, ${(item.billing?.first_name + " " + item.billing?.last_name) || "WC Customer"}, ${parseFloat(item.total || "0")}, ${item.status || "pending"}, ${item.date_created || new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
+                  await sql`INSERT INTO orders (id, external_id, order_number, total_amount, status, items, created_at) VALUES (${crypto.randomUUID()}, ${String(item.id)}, ${String(item.number || item.order_key || "")}, ${parseFloat(item.total || "0")}, ${item.status || "pending"}, ${JSON.stringify({ customer_name: (item.billing?.first_name + " " + item.billing?.last_name) || "WC Customer" })}::jsonb, ${item.date_created || new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
                 } else {
                   await sql`INSERT INTO inventory (id, sku, name, quantity, updated_at) VALUES (${crypto.randomUUID()}, ${item.sku || `WC-${item.id}`}, ${item.name}, ${item.stock_quantity || 0}, NOW()) ON CONFLICT (sku) DO UPDATE SET quantity = ${item.stock_quantity || 0}, updated_at = NOW()`;
                 }
@@ -950,7 +990,7 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
             let synced = 0;
             for (const o of data.value) {
               try {
-                await sql`INSERT INTO orders (id, external_id, customer_name, total_amount, status, created_at) VALUES (${crypto.randomUUID()}, ${String(o.DocEntry)}, ${o.CardName || "SAP Customer"}, ${o.DocTotal || 0}, ${o.DocumentStatus === "bostatus_Close" ? "closed" : "open"}, ${o.DocDate ? new Date(o.DocDate).toISOString() : new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
+                await sql`INSERT INTO orders (id, external_id, order_number, total_amount, status, items, created_at) VALUES (${crypto.randomUUID()}, ${String(o.DocEntry)}, ${String(o.DocNum || "")}, ${o.DocTotal || 0}, ${o.DocumentStatus === "bostatus_Close" ? "closed" : "open"}, ${JSON.stringify({ customer_name: o.CardName || "SAP Customer" })}::jsonb, ${o.DocDate ? new Date(o.DocDate).toISOString() : new Date().toISOString()}) ON CONFLICT (external_id) DO NOTHING`;
                 synced++;
               } catch { /* skip */ }
             }

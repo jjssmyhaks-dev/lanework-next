@@ -98,12 +98,18 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    // Create AgentTask record
+    // Create AgentTask record (non-fatal — don't crash if DB insert fails)
     const taskId = uuidv4();
-    await sql`
-      INSERT INTO agent_tasks (id, tenant_id, agent_type, action_type, status, reasoning_trace, input_data, created_at, updated_at)
-      VALUES (${taskId}, ${userId}, ${agentId}, ${action}, 'completed', ${result}, ${JSON.stringify(data)}::jsonb, NOW(), NOW())
-    `;
+    try {
+      // Use a null UUID if userId is "public" (unauthenticated copilot)
+      const tenantId = userId === "public" ? null : userId;
+      await sql`
+        INSERT INTO agent_tasks (id, tenant_id, agent_type, action_type, status, reasoning_trace, input_data, created_at, updated_at)
+        VALUES (${taskId}, ${tenantId}, ${agentId}, ${action}, 'completed', ${result}, ${JSON.stringify(data)}::jsonb, NOW(), NOW())
+      `;
+    } catch (dbErr) {
+      console.warn("Failed to save agent task to DB (non-fatal):", dbErr);
+    }
 
     return NextResponse.json({
       success: true,

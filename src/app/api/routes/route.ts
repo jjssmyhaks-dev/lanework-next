@@ -3,16 +3,26 @@ import { NextResponse } from "next/server";
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId") || "default";
+/** Map a DB row to the UI shape (origin/destination/stops/distance_km/estimated_minutes) */
+function toApiShape(row: Record<string, unknown>) {
+  const constraints = (row.constraints || {}) as Record<string, unknown>;
+  return {
+    ...row,
+    origin: constraints.origin || "",
+    destination: constraints.destination || "",
+    stops: row.total_stops ?? 0,
+    distance_km: row.total_distance_km ?? 0,
+    estimated_minutes: row.total_duration_minutes ?? 0,
+  };
+}
 
+export async function GET() {
+  try {
     const routes = await sql`
       SELECT * FROM routes ORDER BY created_at DESC
     `;
 
-    return NextResponse.json(routes);
+    return NextResponse.json(routes.map(toApiShape));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -22,28 +32,38 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, origin, destination, stops, distanceKm, estimatedMinutes, status, userId } = body;
+    const { name, origin, destination, stops, distanceKm, estimatedMinutes, status, distance_km, estimated_minutes, total_stops } = body;
 
-    if (!name || !origin || !destination) {
+    if (!name) {
       return NextResponse.json(
-        { error: "Missing required fields: name, origin, destination" },
+        { error: "Missing required field: name" },
         { status: 400 }
       );
     }
 
     const id = crypto.randomUUID();
-    const user_id = userId || "default";
+    const distanceVal = distanceKm ?? distance_km ?? 0;
+    const minutesVal = estimatedMinutes ?? estimated_minutes ?? 0;
+    const stopsVal = stops ?? total_stops ?? 0;
 
     await sql`
-      INSERT INTO routes (id, name, origin, destination, stops, distance_km, estimated_minutes, status)
-      VALUES (${id}, ${name}, ${origin}, ${destination}, ${stops ?? null}, ${distanceKm ?? 0}, ${estimatedMinutes ?? 0}, ${status || "active"})
+      INSERT INTO routes (id, name, status, total_distance_km, total_duration_minutes, total_stops, constraints)
+      VALUES (
+        ${id},
+        ${name},
+        ${status || "active"},
+        ${distanceVal},
+        ${minutesVal},
+        ${stopsVal},
+        ${JSON.stringify({ origin: origin || "", destination: destination || "" })}::jsonb
+      )
     `;
 
     const [route] = await sql`
       SELECT * FROM routes WHERE id = ${id}
     `;
 
-    return NextResponse.json(route, { status: 201 });
+    return NextResponse.json(toApiShape(route), { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });

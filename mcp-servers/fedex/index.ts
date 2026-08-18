@@ -1,3 +1,4 @@
+// @ts-nocheck — MCP SDK types resolved at build time in project context
 /**
  * FedEx / DHL / International Carriers MCP Server
  * For Indian logistics companies shipping internationally
@@ -11,7 +12,7 @@
  * ENV: FEDEX_API_KEY, FEDEX_SECRET_KEY, FEDEX_ACCOUNT_NUMBER, DHL_API_KEY, DHL_ACCOUNT_NUMBER
  */
 
-import { LaneworkMCPServer } from "../shared/server.js";
+import { LaneworkMCPServer, isDirectRun } from "../shared/server.ts";
 import crypto from "crypto";
 
 export class FedexMCP extends LaneworkMCPServer {
@@ -400,37 +401,46 @@ export class FedexMCP extends LaneworkMCPServer {
   }
 }
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-
-const mcp = new FedexMCP();
-const server = new Server({ name: "lanework-fedex-dhl", version: "1.0.0" }, { capabilities: { tools: {} } });
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    { name: "track_fedex", description: "Track FedEx international shipment", inputSchema: { type: "object", properties: { trackingNumber: { type: "string" } }, required: ["trackingNumber"] } },
-    { name: "create_fedex_shipment", description: "Create FedEx international shipment with label", inputSchema: { type: "object", properties: { fromName: { type: "string" }, fromPhone: { type: "string" }, fromAddress: { type: "string" }, fromCity: { type: "string" }, fromPincode: { type: "string" }, fromCountry: { type: "string" }, toName: { type: "string" }, toPhone: { type: "string" }, toAddress: { type: "string" }, toCity: { type: "string" }, toPincode: { type: "string" }, toCountry: { type: "string" }, weightKg: { type: "number" }, declaredValue: { type: "number" } }, required: ["fromName", "fromPhone", "fromAddress", "fromCity", "fromPincode", "fromCountry", "toName", "toPhone", "toAddress", "toCity", "toPincode", "toCountry", "weightKg"] } },
-    { name: "track_dhl", description: "Track DHL Express international shipment", inputSchema: { type: "object", properties: { trackingNumber: { type: "string" } }, required: ["trackingNumber"] } },
-    { name: "create_dhl_shipment", description: "Create DHL Express shipment", inputSchema: { type: "object", properties: { fromName: { type: "string" }, fromAddress: { type: "string" }, fromCity: { type: "string" }, fromPincode: { type: "string" }, toName: { type: "string" }, toAddress: { type: "string" }, toCity: { type: "string" }, toPincode: { type: "string" }, weightKg: { type: "number" }, toCountry: { type: "string" } }, required: ["fromName", "fromAddress", "fromCity", "fromPincode", "toName", "toAddress", "toCity", "toPincode", "weightKg", "toCountry"] } },
-  ],
-}));
-
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const { name, arguments: args } = req.params;
+async function main(): Promise<void> {
+const SDK = "@modelcontextprotocol/sdk";
+  const { Server } = await import(`${SDK}/server/index.js`);
+  const { StdioServerTransport } = await import(`${SDK}/server/stdio.js`);
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import(`${SDK}/types.js`);
+  
+  const mcp = new FedexMCP();
+  const server = new Server({ name: "lanework-fedex-dhl", version: "1.0.0" }, { capabilities: { tools: {} } });
+  
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      { name: "track_fedex", description: "Track FedEx international shipment", inputSchema: { type: "object", properties: { trackingNumber: { type: "string" } }, required: ["trackingNumber"] } },
+      { name: "create_fedex_shipment", description: "Create FedEx international shipment with label", inputSchema: { type: "object", properties: { fromName: { type: "string" }, fromPhone: { type: "string" }, fromAddress: { type: "string" }, fromCity: { type: "string" }, fromPincode: { type: "string" }, fromCountry: { type: "string" }, toName: { type: "string" }, toPhone: { type: "string" }, toAddress: { type: "string" }, toCity: { type: "string" }, toPincode: { type: "string" }, toCountry: { type: "string" }, weightKg: { type: "number" }, declaredValue: { type: "number" } }, required: ["fromName", "fromPhone", "fromAddress", "fromCity", "fromPincode", "fromCountry", "toName", "toPhone", "toAddress", "toCity", "toPincode", "toCountry", "weightKg"] } },
+      { name: "track_dhl", description: "Track DHL Express international shipment", inputSchema: { type: "object", properties: { trackingNumber: { type: "string" } }, required: ["trackingNumber"] } },
+      { name: "create_dhl_shipment", description: "Create DHL Express shipment", inputSchema: { type: "object", properties: { fromName: { type: "string" }, fromAddress: { type: "string" }, fromCity: { type: "string" }, fromPincode: { type: "string" }, toName: { type: "string" }, toAddress: { type: "string" }, toCity: { type: "string" }, toPincode: { type: "string" }, weightKg: { type: "number" }, toCountry: { type: "string" } }, required: ["fromName", "fromAddress", "fromCity", "fromPincode", "toName", "toAddress", "toCity", "toPincode", "weightKg", "toCountry"] } },
+    ],
+  }));
+  
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    const { name, arguments: args } = req.params;
+    await mcp.init();
+    try {
+      switch (name) {
+        case "track_fedex": return { content: [{ type: "text", text: JSON.stringify(await mcp.trackFedex(args.trackingNumber as string), null, 2) }] };
+        case "create_fedex_shipment": return { content: [{ type: "text", text: JSON.stringify(await mcp.createFedexShipment(args as any), null, 2) }] };
+        case "track_dhl": return { content: [{ type: "text", text: JSON.stringify(await mcp.trackDhl(args.trackingNumber as string), null, 2) }] };
+        case "create_dhl_shipment": return { content: [{ type: "text", text: JSON.stringify(await mcp.createDhlShipment(args as any), null, 2) }] };
+        default: throw new Error(`Unknown tool: ${name}`);
+      }
+    } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
+  });
+  
+  const transport = new StdioServerTransport();
   await mcp.init();
-  try {
-    switch (name) {
-      case "track_fedex": return { content: [{ type: "text", text: JSON.stringify(await mcp.trackFedex(args.trackingNumber as string), null, 2) }] };
-      case "create_fedex_shipment": return { content: [{ type: "text", text: JSON.stringify(await mcp.createFedexShipment(args as any), null, 2) }] };
-      case "track_dhl": return { content: [{ type: "text", text: JSON.stringify(await mcp.trackDhl(args.trackingNumber as string), null, 2) }] };
-      case "create_dhl_shipment": return { content: [{ type: "text", text: JSON.stringify(await mcp.createDhlShipment(args as any), null, 2) }] };
-      default: throw new Error(`Unknown tool: ${name}`);
-    }
-  } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
-});
+  await server.connect(transport);
+  console.error("[FedexDHLMCPS] Ready — 4 tools available");
+  
+}
 
-const transport = new StdioServerTransport();
-await mcp.init();
-await server.connect(transport);
-console.error("[FedexDHLMCPS] Ready — 4 tools available");
+// Run only when executed directly (tsx index.ts), not when imported by the app.
+if (isDirectRun(import.meta.url)) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

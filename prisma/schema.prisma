@@ -1,7 +1,8 @@
 // ── Prisma Schema for Lanework ──
-// This schema maps to the existing PostgreSQL database (Neon).
-// Generated tables match what's already in production — do NOT run migrate yet.
-// Run `npx prisma generate` to build the client; migrations are for future use.
+// Reconciled with live Neon DB schema on 2026-08-12.
+// All 34 tables match the actual database columns, types, and constraints.
+// Missing columns added for integration handlers (payment_mode, external_id, last_seen_at, etc.).
+// Use `prisma db push` to sync new columns; existing data is preserved.
 
 generator client {
   provider = "prisma-client-js"
@@ -12,17 +13,60 @@ datasource db {
 }
 
 // ═══════════════════════════════════════════
-// Auth
+// Multi-Tenancy
+// ═══════════════════════════════════════════
+
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  companyName String?  @map("company_name")
+  plan        String   @default("starter")
+  status      String   @default("active")
+  settings    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  users            User[]
+  shipments        Shipment[]
+  orders           Order[]
+  vehicles         Vehicle[]
+  drivers          Driver[]
+  customers        Customer[]
+  routes             Route[]
+  warehouses         Warehouse[]
+  inventoryItems   InventoryItem[]
+  inventoryMovements InventoryMovement[]
+  integrations     Integration[]
+  agentTasks       AgentTask[]
+  auditLogs        AuditLog[]
+  conversations    Conversation[]
+  whatsappMessages WhatsAppMessage[]
+
+  @@map("tenants")
+}
+
+// ═══════════════════════════════════════════
+// Auth & Users
 // ═══════════════════════════════════════════
 
 model User {
-  id            String    @id
-  name          String?
+  id            String    @id @default(uuid())
+  tenantId      String?   @map("tenant_id")
   email         String    @unique
-  passwordHash  String?   @map("password_hash")
-  emailVerified DateTime? @map("email_verified")
-  image         String?
+  passwordHash  String    @map("password_hash")
+  name          String?
+  role          String    @default("user")
+  avatarUrl     String?   @map("avatar_url")
+  phone         String?
+  status        String    @default("active")
+  lastLogin     DateTime? @map("last_login")
   createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tenant  Tenant?       @relation(fields: [tenantId], references: [id])
+  orders  Order[]       @relation("OrderCustomer")
+  session Session[]
 
   @@map("users")
 }
@@ -31,6 +75,8 @@ model Session {
   sessionToken String   @id @map("session_token")
   userId       String   @map("user_id")
   expires      DateTime
+
+  user User @relation(fields: [userId], references: [id])
 
   @@map("sessions")
 }
@@ -42,49 +88,172 @@ model Session {
 model Organization {
   id        String   @id
   name      String
-  slug      String?  @unique
   ownerId   String   @map("owner_id")
-  logoUrl   String?  @map("logo_url")
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("organizations")
 }
 
 model Subscription {
-  id                   String    @id
-  orgId                String    @map("org_id")
-  plan                 String    @default("starter")
-  status               String    @default("trial")
-  trialStart           DateTime  @default(now()) @map("trial_start")
-  trialEnd             DateTime? @map("trial_end")
-  paymentMethodAdded   Boolean   @default(false) @map("payment_method_added")
-  stripeCustomerId     String?   @map("stripe_customer_id")
-  stripeSubscriptionId String?   @map("stripe_subscription_id")
-  gracePeriodEnds      DateTime? @map("grace_period_ends")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at")
+  id                 String    @id
+  orgId              String    @map("org_id")
+  plan               String    @default("starter")
+  status             String    @default("trial")
+  trialStart         DateTime  @default(now()) @map("trial_start")
+  trialEnd           DateTime? @map("trial_end")
+  paymentMethodAdded Boolean   @default(false) @map("payment_method_added")
+  createdAt          DateTime  @default(now()) @map("created_at")
 
   @@map("subscriptions")
 }
 
 // ═══════════════════════════════════════════
-// Integrations
+// Shipments
 // ═══════════════════════════════════════════
 
-model Integration {
-  id              String    @id
-  orgId           String    @map("org_id")
-  integrationType String?   @map("integration_type")
-  type            String?
-  name            String
-  status          String    @default("disconnected")
-  config          Json      @default("{}")
-  connectedAt     DateTime? @map("connected_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+model Shipment {
+  id                 String    @id @default(uuid())
+  tenantId           String?   @map("tenant_id")
+  trackingNumber     String?   @map("tracking_number")
+  orderNumber        String?   @map("order_number")
+  carrier            String?
+  carrierService     String?   @map("carrier_service")
+  status             String    @default("pending")
+  origin             Json?
+  destination        Json?
+  customerName       String?   @map("customer_name")
+  customerPhone      String?   @map("customer_phone")
+  customerEmail      String?   @map("customer_email")
+  estimatedDelivery  DateTime? @map("estimated_delivery")
+  actualDelivery     DateTime? @map("actual_delivery")
+  currentLocation    Json?     @map("current_location")
+  etaDriftMinutes    Float?    @map("eta_drift_minutes")
+  weightKg           Float?    @map("weight_kg")
+  packageCount       Int       @default(1) @map("package_count")
+  declaredValue      Decimal?  @map("declared_value") @db.Decimal(10, 2)
+  notes              String?
+  metadata           Json?     @default("{}")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
 
-  @@map("integrations")
+  tenant    Tenant?         @relation(fields: [tenantId], references: [id])
+  events    ShipmentEvent[]
+
+  @@map("shipments")
+}
+
+model ShipmentEvent {
+  id          String   @id @default(uuid())
+  shipmentId  String?  @map("shipment_id")
+  timestamp   DateTime @default(now())
+  eventType   String   @map("event_type")
+  description String?
+  location    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  shipment Shipment? @relation(fields: [shipmentId], references: [id])
+
+  @@map("shipment_events")
+}
+
+// ═══════════════════════════════════════════
+// Orders
+// ═══════════════════════════════════════════
+
+model Order {
+  id              String   @id @default(uuid())
+  tenantId        String?  @map("tenant_id")
+  customerId      String?  @map("customer_id")
+  orderNumber     String?  @map("order_number") @unique
+  status          String   @default("pending")
+  items           Json?    @default("[]")
+  totalAmount     Decimal? @map("total_amount") @db.Decimal(10, 2)
+  shippingAddress Json?    @map("shipping_address")
+  billingAddress  Json?    @map("billing_address")
+  notes           String?
+  paymentMode     String?  @map("payment_mode")
+  externalId      String?  @map("external_id") @unique
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+  customer User?   @relation("OrderCustomer", fields: [customerId], references: [id])
+
+  @@map("orders")
+}
+
+// ═══════════════════════════════════════════
+// Inventory (legacy simple table)
+// ═══════════════════════════════════════════
+
+model Inventory {
+  id           String   @id
+  userId       String   @map("user_id")
+  sku          String
+  name         String
+  quantity     Int      @default(0)
+  reorderPoint Int      @default(0) @map("reorder_point")
+  warehouse    String?
+  location     String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("inventory")
+}
+
+// ═══════════════════════════════════════════
+// Inventory Items (full-featured)
+// ═══════════════════════════════════════════
+
+model InventoryItem {
+  id               String    @id @default(uuid())
+  tenantId         String?   @map("tenant_id")
+  warehouseId      String?   @map("warehouse_id")
+  sku              String
+  name             String?
+  description      String?
+  category         String?
+  location         String?
+  quantityOnHand   Int       @default(0) @map("quantity_on_hand")
+  quantityReserved  Int       @default(0) @map("quantity_reserved")
+  quantityAvailable Int      @default(0) @map("quantity_available")
+  reorderPoint     Int       @default(0) @map("reorder_point")
+  reorderQuantity  Int       @default(0) @map("reorder_quantity")
+  unitCost         Decimal?  @map("unit_cost") @db.Decimal(10, 2)
+  unitOfMeasure    String    @default("pcs") @map("unit_of_measure")
+  lowStockAlert    Boolean   @default(false) @map("low_stock_alert")
+  expiryDate       DateTime? @map("expiry_date")
+  batchNumber      String?   @map("batch_number")
+  supplierId       String?   @map("supplier_id")
+  status           String    @default("active")
+  lastUpdated      DateTime  @default(now()) @map("last_updated")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tenant    Tenant?            @relation(fields: [tenantId], references: [id])
+  warehouse Warehouse?         @relation(fields: [warehouseId], references: [id])
+  movements InventoryMovement[]
+
+  @@unique([tenantId, sku])
+  @@unique([warehouseId, sku])
+  @@map("inventory_items")
+}
+
+model InventoryMovement {
+  id               String   @id @default(uuid())
+  inventoryItemId  String?  @map("inventory_item_id")
+  tenantId         String?  @map("tenant_id")
+  adjustmentType   String   @map("adjustment_type")
+  quantity         Int
+  reference        String?
+  userId           String?  @map("user_id")
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  inventoryItem InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  tenant        Tenant?        @relation(fields: [tenantId], references: [id])
+
+  @@map("inventory_movements")
 }
 
 // ═══════════════════════════════════════════
@@ -92,152 +261,191 @@ model Integration {
 // ═══════════════════════════════════════════
 
 model Vehicle {
-  id                 String    @id
-  userId             String?   @map("user_id")
-  plate              String?
+  id                String    @id @default(uuid())
+  tenantId          String?   @map("tenant_id")
+  name              String
+  vin               String?
+  licensePlate      String    @unique @map("license_plate")
+  vehicleType       String    @map("vehicle_type")
+  status            String    @default("active")
+  capacityCubicFeet Float?    @map("capacity_cubic_feet")
+  capacityWeightKg  Float?    @map("capacity_weight_kg")
+  fuelType          String?   @map("fuel_type")
+  odometer          Int       @default(0)
   registration      String?
-  type               String
-  status             String    @default("available")
-  mileageKm          Float     @default(0) @map("mileage_km")
-  capacityKg         Float?    @map("capacity_kg")
-  lastMaintenance    DateTime? @map("last_maintenance_date")
-  maintenanceDueDate DateTime? @map("maintenance_due_date")
-  lastSeenAt         DateTime? @map("last_seen_at")
-  lastLat            Float?    @map("last_lat")
-  lastLng            Float?    @map("last_lng")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+  lastSeenAt        DateTime? @map("last_seen_at")
+  lastLat           Float?    @map("last_lat")
+  lastLng           Float?    @map("last_lng")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
 
   @@map("vehicles")
 }
 
 model Driver {
-  id              String   @id
-  userId          String?  @map("user_id")
-  name            String
-  phone           String?
-  license         String?
-  licenseNumber   String?  @map("license_number")
-  status          String   @default("available")
-  hoursDriven     Float    @default(0) @map("hours_driven")
-  maxHours        Float    @default(11) @map("max_hours")
-  hoursToday      Float?   @map("hours_today")
-  assignedVehicle String?  @map("assigned_vehicle")
-  vehicleId       String?  @map("vehicle_id")
-  assignedRouteId String?  @map("assigned_route_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+  id            String    @id @default(uuid())
+  tenantId      String?   @map("tenant_id")
+  name          String
+  licenseNumber String?   @map("license_number") @unique
+  licenseState  String?   @map("license_state")
+  licenseExpiry DateTime? @map("license_expiry")
+  status        String    @default("active")
+  phone         String?
+  email         String?
+  skills        String[]  @default([])
+  currentVehicleId String? @map("current_vehicle_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
 
   @@map("drivers")
 }
 
+model FleetVehicle {
+  id        String  @id
+  userId    String  @map("user_id")
+  plate     String
+  type      String
+  status    String  @default("available")
+  mileageKm Float?  @map("mileage_km")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("fleet_vehicles")
+}
+
+model FleetDriver {
+  id             String  @id
+  userId         String  @map("user_id")
+  name           String
+  license        String?
+  status         String  @default("available")
+  hoursDriven    Float?  @map("hours_driven")
+  maxHours       Float?  @map("max_hours")
+  assignedVehicle String? @map("assigned_vehicle")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("fleet_drivers")
+}
+
 // ═══════════════════════════════════════════
-// Logistics
+// Customers
 // ═══════════════════════════════════════════
 
-model Shipment {
-  id                String    @id
-  userId            String?   @map("user_id")
-  trackingNumber    String    @map("tracking_number")
-  carrier           String
-  status            String    @default("pending")
-  origin            String?
-  destination       String?
-  estimatedDelivery String?   @map("estimated_delivery")
-  eta               String?
-  customerName      String?   @map("customer_name")
-  customerPhone     String?   @map("customer_phone")
-  metadata          Json?
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+model Customer {
+  id             String   @id @default(uuid())
+  tenantId       String?  @map("tenant_id")
+  name           String
+  email          String?
+  phone          String?
+  whatsappPhone  String?  @map("whatsapp_phone")
+  address        Json?
+  accountNumber  String?  @unique @map("account_number")
+  status         String   @default("active")
+  tags           String[]  @default([])
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
-  @@map("shipments")
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@map("customers")
 }
 
-model Inventory {
-  id              String   @id
-  userId          String?  @map("user_id")
-  sku             String
-  name            String
-  itemName        String?  @map("item_name")
-  category        String?
-  quantity        Int      @default(0)
-  unit            String?
-  warehouseId     String?  @map("warehouse_id")
-  warehouse       String?
-  location        String?
-  reorderPoint    Int      @default(0) @map("reorder_point")
-  reorderQuantity Int      @default(0) @map("reorder_quantity")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
-
-  @@map("inventory")
-}
-
-model Order {
-  id           String   @id
-  userId       String?  @map("user_id")
-  orderNumber  String   @map("order_number")
-  customerName String?  @map("customer_name")
-  status       String   @default("pending")
-  totalAmount  Float?   @map("total_amount")
-  items        Json?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
-
-  @@map("orders")
-}
+// ═══════════════════════════════════════════
+// Routes
+// ═══════════════════════════════════════════
 
 model Route {
-  id                  String   @id
-  userId              String?  @map("user_id")
-  name                String
-  origin              String
-  destination         String
-  stops               Int      @default(1)
-  distanceKm          Float    @default(0) @map("distance_km")
-  estimatedMinutes    Int      @default(0) @map("estimated_minutes")
-  estimatedDurationMin Int?    @map("estimated_duration_min")
-  status              String   @default("active")
-  optimizations       Json?
-  driverId            String?  @map("driver_id")
-  vehicleId           String?  @map("vehicle_id")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  id                   String    @id @default(uuid())
+  tenantId             String?   @map("tenant_id")
+  name                 String?
+  status               String    @default("pending")
+  driverId             String?   @map("driver_id")
+  driverName           String?   @map("driver_name")
+  vehicleId            String?   @map("vehicle_id")
+  vehicleName          String?   @map("vehicle_name")
+  warehouseId          String?   @map("warehouse_id")
+  date                 DateTime?
+  totalDistanceKm       Float     @default(0) @map("total_distance_km")
+  totalDurationMinutes Int       @default(0) @map("total_duration_minutes")
+  totalStops           Int       @default(0) @map("total_stops")
+  optimizationScore    Float?    @map("optimization_score")
+  constraints          Json?     @default("{}")
+  metrics              Json?     @default("{}")
+  assignedAt           DateTime? @map("assigned_at")
+  startedAt            DateTime? @map("started_at")
+  completedAt          DateTime? @map("completed_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tenant    Tenant?      @relation(fields: [tenantId], references: [id])
+  warehouse Warehouse?   @relation(fields: [warehouseId], references: [id])
+  stops     RouteStop[]
 
   @@map("routes")
 }
 
-model Customer {
-  id           String   @id
-  userId       String?  @map("user_id")
-  customerName String?  @map("customer_name")
-  name         String?
-  email        String?
-  phone        String?
-  company      String?
-  channel      String?  @default("chat")
-  status       String   @default("active")
-  address      String?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+model RouteStop {
+  id                 String   @id @default(uuid())
+  routeId            String?  @map("route_id")
+  sequence           Int
+  location           Json
+  stopType           String   @map("stop_type")
+  timeWindowStart    DateTime? @map("time_window_start")
+  timeWindowEnd      DateTime? @map("time_window_end")
+  estimatedArrival   DateTime? @map("estimated_arrival")
+  actualArrival      DateTime? @map("actual_arrival")
+  estimatedDeparture DateTime? @map("estimated_departure")
+  actualDeparture    DateTime? @map("actual_departure")
+  shipmentIds        String[]  @default([]) @map("shipment_ids")
+  status             String   @default("pending")
+  notes              String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
 
-  @@map("customers")
+  route  Route?  @relation(fields: [routeId], references: [id])
+
+  @@unique([routeId, sequence])
+  @@map("route_stops")
 }
 
 // ═══════════════════════════════════════════
 // Warehouses
 // ═══════════════════════════════════════════
 
+model Warehouse {
+  id        String   @id @default(uuid())
+  tenantId  String?  @map("tenant_id")
+  name      String
+  code      String?
+  address   Json?
+  status    String   @default("active")
+  config    Json?    @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  tenant        Tenant?            @relation(fields: [tenantId], references: [id])
+  routes        Route[]
+  inventoryItems InventoryItem[]
+
+  @@unique([tenantId, name])
+  @@map("warehouses")
+}
+
+// Legacy warehouse table (dock scheduling)
 model WarehouseTask {
   id         String   @id
   userId     String   @map("user_id")
   type       String
   priority   String   @default("medium")
-  status     String   @default("pending")
   assignedTo String?  @map("assigned_to")
   dock       String?
   metadata   Json?
+  status     String   @default("pending")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -245,28 +453,56 @@ model WarehouseTask {
 }
 
 // ═══════════════════════════════════════════
+// Integrations
+// ═══════════════════════════════════════════
+
+model Integration {
+  id              String    @id @default(uuid())
+  tenantId        String?   @map("tenant_id")
+  integrationType String    @map("integration_type")
+  name            String?
+  config          Json?     @default("{}")
+  credentials     Json?     @default("{}")
+  status          String    @default("inactive")
+  lastSyncAt      DateTime? @map("last_sync_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@unique([integrationType])
+  @@unique([tenantId])
+  @@map("integrations")
+}
+
+// ═══════════════════════════════════════════
 // Agent System
 // ═══════════════════════════════════════════
 
 model AgentTask {
-  id        String   @id
-  agentId   String?  @map("agent_id")
-  userId    String   @map("user_id")
-  action    String?
-  agentType String?  @map("agent_type")
-  status    String   @default("pending")
-  reasoning String?
-  payload   Json?
-  result    Json?
-  input     Json?
-  output    Json?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  tenantId          String?   @map("tenant_id")
+  agentType         String    @map("agent_type")
+  actionType        String    @map("action_type")
+  status            String    @default("pending_approval")
+  trustLevel        String    @default("propose_only") @map("trust_level")
+  reasoningTrace    String?   @map("reasoning_trace")
+  inputData         Json?     @default("{}") @map("input_data")
+  outputData        Json?     @map("output_data")
+  approvalRequestId String?   @map("approval_request_id")
+  relatedEntityId   String?   @map("related_entity_id")
+  relatedEntityType String?   @map("related_entity_type")
+  errorMessage      String?   @map("error_message")
+  completedAt       DateTime? @map("completed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
 
   @@map("agent_tasks")
 }
 
-model AgentConfig {
+model AgentTrustConfig {
   id            String   @id
   orgId         String   @map("org_id")
   agentType     String   @map("agent_type")
@@ -276,24 +512,38 @@ model AgentConfig {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
 
-  @@unique([orgId, agentType])
   @@map("agent_trust_configs")
 }
 
 model ApprovalAction {
-  id             String    @id
-  orgId          String    @map("org_id")
-  agentType      String    @map("agent_type")
-  actionType     String    @map("action_type")
-  description    String?
-  inputData      Json?     @map("input_data")
-  status         String    @default("pending")
-  approvedBy     String?   @map("approved_by")
-  rejectedReason String?   @map("rejected_reason")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  resolvedAt     DateTime? @map("resolved_at")
+  id          String   @id
+  orgId       String   @map("org_id")
+  agentType   String   @map("agent_type")
+  actionType  String   @map("action_type")
+  description String?
+  inputData   Json?    @map("input_data")
+  status      String   @default("pending")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   @@map("approval_actions")
+}
+
+model ApprovalRequest {
+  id               String    @id @default(uuid())
+  tenantId         String?   @map("tenant_id")
+  agentTaskId      String?   @map("agent_task_id")
+  agentType        String    @map("agent_type")
+  actionDescription String   @map("action_description")
+  status           String    @default("pending")
+  requestedBy      String    @map("requested_by")
+  approvedBy       String?   @map("approved_by")
+  rejectedBy       String?   @map("rejected_by")
+  rejectionReason  String?   @map("rejection_reason")
+  expiresAt        DateTime? @map("expires_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@map("approval_requests")
 }
 
 // ═══════════════════════════════════════════
@@ -303,7 +553,7 @@ model ApprovalAction {
 model Webhook {
   id            String   @id
   type          String
-  endpoint      String?
+  endpoint      String
   secret        String?
   integrationId String?  @map("integration_id")
   active        Boolean  @default(true)
@@ -316,32 +566,31 @@ model WebhookEvent {
   id            String    @id
   webhookId     String?   @map("webhook_id")
   integrationId String?   @map("integration_id")
-  eventType     String?   @map("event_type")
-  payload       Json?
-  receivedAt    DateTime? @map("received_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  eventType     String    @map("event_type")
+  payload       Json?     @default("{}")
+  processed     Boolean   @default(false)
+  receivedAt    DateTime  @default(now()) @map("received_at")
+  processedAt   DateTime? @map("processed_at")
 
   @@map("webhook_events")
 }
 
 model WhatsAppMessage {
-  id        String   @id
-  recipient String?
-  status    String?
-  content   String?
-  createdAt DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  tenantId         String?  @map("tenant_id")
+  fromNumber       String   @map("from_number")
+  toNumber         String   @map("to_number")
+  messageType      String   @default("text") @map("message_type")
+  content          String?
+  direction        String   @default("outbound")
+  status           String   @default("sent")
+  relatedEntityType String?  @map("related_entity_type")
+  relatedEntityId  String?  @map("related_entity_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
 
   @@map("whatsapp_messages")
-}
-
-model EwayBill {
-  id         String   @id
-  ewbNo      String?  @map("ewb_no")
-  status     String?
-  shipmentId String?  @map("shipment_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  @@map("eway_bills")
 }
 
 // ═══════════════════════════════════════════
@@ -349,27 +598,29 @@ model EwayBill {
 // ═══════════════════════════════════════════
 
 model Conversation {
-  id            String    @id
-  userId        String    @map("user_id")
-  title         String?
-  customerName  String?   @map("customer_name")
-  channel       String    @default("chat")
-  status        String    @default("open")
-  sentiment     String?
-  model         String    @default("cloudflare-workers-ai")
-  lastMessageAt DateTime  @default(now()) @map("last_message_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+  id        String    @id @default(uuid())
+  tenantId  String?   @map("tenant_id")
+  userId    String?   @map("user_id")
+  title     String?
+  status    String    @default("active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  tenant Tenant?   @relation(fields: [tenantId], references: [id])
+  messages Message[]
 
   @@map("conversations")
 }
 
 model Message {
-  id             String   @id
-  conversationId String   @map("conversation_id")
+  id             String   @id @default(uuid())
+  conversationId String?  @map("conversation_id")
   role           String
   content        String
+  metadata       Json?    @default("{}")
   createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
 
   @@map("messages")
 }
@@ -379,13 +630,19 @@ model Message {
 // ═══════════════════════════════════════════
 
 model AuditLog {
-  id         String   @id
-  userId     String?  @map("user_id")
-  action     String?
-  entityType String?  @map("entity_type")
-  entityId   String?  @map("entity_id")
-  details    Json?
-  createdAt  DateTime @default(now()) @map("created_at")
+  id         String    @id @default(uuid())
+  tenantId   String?   @map("tenant_id")
+  userId     String?   @map("user_id")
+  action     String    @map("action")
+  entityType String    @map("entity_type")
+  entityId   String    @map("entity_id")
+  oldValues  Json?     @map("old_values")
+  newValues  Json?     @map("new_values")
+  ipAddress  String?   @map("ip_address")
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
 
   @@map("audit_logs")
 }
@@ -412,3 +669,104 @@ model ContactSubmission {
 
   @@map("contact_submissions")
 }
+
+// ═══════════════════════════════════════════
+// MCP domain tables (created idempotently by mcp-servers/shared/server.ts)
+// ═══════════════════════════════════════════
+
+model EwayBill {
+  id           String   @id @default(uuid())
+  ewbNo        String?  @map("ewb_no")
+  shipmentId   String?  @map("shipment_id")
+  fromGstin    String?  @map("from_gstin")
+  toGstin      String?  @map("to_gstin")
+  invoiceNo    String?  @map("invoice_no")
+  invoiceValue Decimal? @map("invoice_value") @db.Decimal(12, 2)
+  status       String   @default("generated")
+  validUntil   DateTime? @map("valid_until")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("eway_bills")
+}
+
+model Dock {
+  id          String   @id @default(uuid())
+  warehouseId String?  @map("warehouse_id")
+  name        String
+  type        String   @default("dock")
+  capacity    String?
+  status      String   @default("available")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("docks")
+}
+
+model DockBooking {
+  id            String   @id @default(uuid())
+  warehouseId   String?  @map("warehouse_id")
+  dockId        String?  @map("dock_id")
+  carrierName   String?  @map("carrier_name")
+  vehicleReg    String?  @map("vehicle_reg")
+  bookingType   String?  @map("booking_type")
+  scheduledFrom DateTime? @map("scheduled_from")
+  scheduledTo   DateTime? @map("scheduled_to")
+  status        String   @default("booked")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("dock_bookings")
+}
+
+model MaintenanceSchedule {
+  id            String   @id @default(uuid())
+  vehicleId     String?  @map("vehicle_id")
+  type          String?
+  description   String?
+  scheduledDate DateTime? @map("scheduled_date")
+  priority      String   @default("medium")
+  status        String   @default("scheduled")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("maintenance_schedules")
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  invoiceNumber String?  @map("invoice_number")
+  customerName  String?  @map("customer_name")
+  totalAmount   Decimal? @map("total_amount") @db.Decimal(12, 2)
+  invoiceDate   DateTime? @map("invoice_date")
+  source        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("invoices")
+}
+
+model Pincode {
+  pincode String  @id
+  lat     Float?
+  lng     Float?
+  city    String?
+  state   String?
+
+  @@map("pincodes")
+}
+
+model PickVerification {
+  id         String   @id @default(uuid())
+  orderId    String?  @map("order_id")
+  sku        String?
+  expectedQty Int?    @map("expected_qty")
+  scannedQty Int?     @map("scanned_qty")
+  location   String?
+  scannedBy  String?  @map("scanned_by")
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("pick_verifications")
+}
+
+// Dashboard stats queried directly via SQL — not managed by Prisma

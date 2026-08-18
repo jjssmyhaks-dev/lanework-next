@@ -20,8 +20,7 @@ jobs:
       - run: npm ci
 
       - name: Lint
-        run: npx next lint
-        continue-on-error: true
+        run: npm run lint
 
       - name: Type check
         run: npx next build
@@ -33,7 +32,6 @@ jobs:
 
       - name: Run tests
         run: npx vitest run --reporter=verbose
-        continue-on-error: true
 
   deploy:
     needs: lint-test-build

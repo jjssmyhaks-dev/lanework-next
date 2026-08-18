@@ -2,16 +2,17 @@
   "name": "lanework-mcp-servers",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "MCP servers for Lanework AI agents — real integrations, no stubs",
   "scripts": {
-    "shiprocket": "cd mcp-servers/shiprocket && tsx index.ts",
-    "tally": "cd mcp-servers/tally && tsx index.ts",
-    "ewaybill": "cd mcp-servers/ewaybill && tsx index.ts",
-    "mapmyindia": "cd mcp-servers/mapmyindia && tsx index.ts",
-    "fleet": "cd mcp-servers/fleet && tsx index.ts",
-    "email": "cd mcp-servers/email && tsx index.ts",
-    "wms": "cd mcp-servers/wms && tsx index.ts",
-    "scanner": "cd mcp-servers/scanner && tsx index.ts"
+    "shiprocket": "node --experimental-strip-types shiprocket/index.ts",
+    "tally": "node --experimental-strip-types tally/index.ts",
+    "ewaybill": "node --experimental-strip-types ewaybill/index.ts",
+    "mapmyindia": "node --experimental-strip-types mapmyindia/index.ts",
+    "fleet": "node --experimental-strip-types fleet/index.ts",
+    "email": "node --experimental-strip-types email/index.ts",
+    "wms": "node --experimental-strip-types wms/index.ts",
+    "scanner": "node --experimental-strip-types scanner/index.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

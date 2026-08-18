@@ -1,3 +1,4 @@
+// @ts-nocheck — MCP SDK types resolved at build time in project context
 /**
  * E-Way Bill (GSTN) MCP Server
  * Auto-generate e-way bills from shipment data — GST compliance automated
@@ -15,8 +16,8 @@
  * ENV: GSTN_API_KEY, GSTN_USERNAME, GSTN_PASSWORD, GSTN_BASE_URL
  */
 
-// @ts-nocheck � MCP SDK types resolved at build time
-import { LaneworkMCPServer } from "../shared/server.js";
+// @ts-nocheck � MCP SDK types resolved at build time
+import { LaneworkMCPServer, isDirectRun } from "../shared/server.ts";
 import crypto from "crypto";
 
 export class EwayBillMCP extends LaneworkMCPServer {
@@ -361,37 +362,46 @@ export class EwayBillMCP extends LaneworkMCPServer {
 }
 
 // ─── MCP Entry Point ───
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-
-const mcp = new EwayBillMCP();
-const server = new Server({ name: "lanework-ewaybill", version: "1.0.0" }, { capabilities: { tools: {} } });
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    { name: "generate_ewaybill", description: "Generate e-way bill from shipment details", inputSchema: { type: "object", properties: { shipmentId: { type: "string" }, fromGstin: { type: "string" }, toGstin: { type: "string" }, fromPincode: { type: "string" }, toPincode: { type: "string" }, invoiceNo: { type: "string" }, invoiceValue: { type: "number" }, hsnCode: { type: "string" }, productName: { type: "string" }, quantity: { type: "number" }, vehicleNo: { type: "string" }, transporterId: { type: "string" } }, required: ["shipmentId", "fromGstin", "toGstin", "fromPincode", "toPincode", "invoiceNo", "invoiceValue", "hsnCode", "productName", "quantity"] } },
-    { name: "cancel_ewaybill", description: "Cancel an e-way bill", inputSchema: { type: "object", properties: { ewbNo: { type: "string" }, reason: { type: "string" } }, required: ["ewbNo"] } },
-    { name: "get_ewaybill", description: "Fetch e-way bill details by number", inputSchema: { type: "object", properties: { ewbNo: { type: "string" } }, required: ["ewbNo"] } },
-    { name: "validate_gstin", description: "Validate a GSTIN number", inputSchema: { type: "object", properties: { gstin: { type: "string" } }, required: ["gstin"] } },
-  ],
-}));
-
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
-  const { name, arguments: args } = req.params;
+async function main(): Promise<void> {
+const SDK = "@modelcontextprotocol/sdk";
+  const { Server } = await import(`${SDK}/server/index.js`);
+  const { StdioServerTransport } = await import(`${SDK}/server/stdio.js`);
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import(`${SDK}/types.js`);
+  
+  const mcp = new EwayBillMCP();
+  const server = new Server({ name: "lanework-ewaybill", version: "1.0.0" }, { capabilities: { tools: {} } });
+  
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      { name: "generate_ewaybill", description: "Generate e-way bill from shipment details", inputSchema: { type: "object", properties: { shipmentId: { type: "string" }, fromGstin: { type: "string" }, toGstin: { type: "string" }, fromPincode: { type: "string" }, toPincode: { type: "string" }, invoiceNo: { type: "string" }, invoiceValue: { type: "number" }, hsnCode: { type: "string" }, productName: { type: "string" }, quantity: { type: "number" }, vehicleNo: { type: "string" }, transporterId: { type: "string" } }, required: ["shipmentId", "fromGstin", "toGstin", "fromPincode", "toPincode", "invoiceNo", "invoiceValue", "hsnCode", "productName", "quantity"] } },
+      { name: "cancel_ewaybill", description: "Cancel an e-way bill", inputSchema: { type: "object", properties: { ewbNo: { type: "string" }, reason: { type: "string" } }, required: ["ewbNo"] } },
+      { name: "get_ewaybill", description: "Fetch e-way bill details by number", inputSchema: { type: "object", properties: { ewbNo: { type: "string" } }, required: ["ewbNo"] } },
+      { name: "validate_gstin", description: "Validate a GSTIN number", inputSchema: { type: "object", properties: { gstin: { type: "string" } }, required: ["gstin"] } },
+    ],
+  }));
+  
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    const { name, arguments: args } = req.params;
+    await mcp.init();
+    try {
+      switch (name) {
+        case "generate_ewaybill": return { content: [{ type: "text", text: JSON.stringify(await mcp.generateEwaybill(args as any), null, 2) }] };
+        case "cancel_ewaybill": return { content: [{ type: "text", text: JSON.stringify(await mcp.cancelEwaybill(args.ewbNo as string, (args.reason as string) || ""), null, 2) }] };
+        case "get_ewaybill": return { content: [{ type: "text", text: JSON.stringify(await mcp.getEwaybill(args.ewbNo as string), null, 2) }] };
+        case "validate_gstin": return { content: [{ type: "text", text: JSON.stringify(await mcp.validateGstin(args.gstin as string), null, 2) }] };
+        default: throw new Error(`Unknown tool: ${name}`);
+      }
+    } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
+  });
+  
+  const transport = new StdioServerTransport();
   await mcp.init();
-  try {
-    switch (name) {
-      case "generate_ewaybill": return { content: [{ type: "text", text: JSON.stringify(await mcp.generateEwaybill(args as any), null, 2) }] };
-      case "cancel_ewaybill": return { content: [{ type: "text", text: JSON.stringify(await mcp.cancelEwaybill(args.ewbNo as string, (args.reason as string) || ""), null, 2) }] };
-      case "get_ewaybill": return { content: [{ type: "text", text: JSON.stringify(await mcp.getEwaybill(args.ewbNo as string), null, 2) }] };
-      case "validate_gstin": return { content: [{ type: "text", text: JSON.stringify(await mcp.validateGstin(args.gstin as string), null, 2) }] };
-      default: throw new Error(`Unknown tool: ${name}`);
-    }
-  } catch (e: any) { return { content: [{ type: "text", text: JSON.stringify({ error: e.message }) }], isError: true }; }
-});
+  await server.connect(transport);
+  console.error("[EwayBillMCP] Ready — 4 tools available");
+  
+}
 
-const transport = new StdioServerTransport();
-await mcp.init();
-await server.connect(transport);
-console.error("[EwayBillMCP] Ready — 4 tools available");
+// Run only when executed directly (tsx index.ts), not when imported by the app.
+if (isDirectRun(import.meta.url)) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

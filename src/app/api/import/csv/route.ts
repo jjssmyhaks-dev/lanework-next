@@ -44,6 +44,9 @@ export async function POST(request: NextRequest) {
         switch (entityType) {
           case "shipment": {
             const id = row.id || crypto.randomUUID();
+            // origin/destination are JSONB in live DB
+            const originVal = row.origin || row.from || "";
+            const destVal = row.destination || row.to || "";
             await sql`
               INSERT INTO shipments (id, tracking_number, carrier, status, origin, destination, estimated_delivery, customer_name, customer_phone)
               VALUES (
@@ -51,48 +54,71 @@ export async function POST(request: NextRequest) {
                 ${row.tracking_number || row.trackingNumber || row.awb || ""},
                 ${row.carrier || "Manual"},
                 ${row.status || "pending"},
-                ${row.origin || row.from || ""},
-                ${row.destination || row.to || ""},
+                ${JSON.stringify({ address: originVal })}::jsonb,
+                ${JSON.stringify({ address: destVal })}::jsonb,
                 ${row.estimated_delivery || row.eta || null},
                 ${row.customer_name || row.customerName || ""},
                 ${row.customer_phone || row.customerPhone || ""}
               )
               ON CONFLICT (id) DO UPDATE SET
                 status = ${row.status || "pending"},
-                origin = ${row.origin || row.from || ""},
-                destination = ${row.destination || row.to || ""},
+                origin = ${JSON.stringify({ address: originVal })}::jsonb,
+                destination = ${JSON.stringify({ address: destVal })}::jsonb,
                 updated_at = NOW()
             `;
             break;
           }
           case "inventory": {
             const id = row.id || crypto.randomUUID();
+            // Target inventory_items (full-featured table) instead of inventory
             await sql`
-              INSERT INTO inventory (id, sku, name, category, quantity, unit, warehouse_id, reorder_point, reorder_quantity)
+              INSERT INTO inventory_items (
+                id, sku, name, category, quantity_on_hand, quantity_available,
+                unit_of_measure, warehouse_id, reorder_point, reorder_quantity
+              )
               VALUES (
-                ${id}, ${row.sku || row.SKU || ""}, ${row.name || row.product_name || ""},
-                ${row.category || ""}, ${parseInt(row.quantity) || 0}, ${row.unit || "pcs"},
+                ${id},
+                ${row.sku || row.SKU || ""},
+                ${row.name || row.product_name || ""},
+                ${row.category || null},
+                ${parseInt(row.quantity) || 0},
+                ${parseInt(row.quantity) || 0},
+                ${row.unit || row.unit_of_measure || "pcs"},
                 ${row.warehouse_id || row.warehouseId || null},
-                ${parseInt(row.reorder_point) || 0}, ${parseInt(row.reorder_quantity) || 0}
+                ${parseInt(row.reorder_point) || 0},
+                ${parseInt(row.reorder_quantity) || 0}
               )
               ON CONFLICT (id) DO UPDATE SET
-                quantity = ${parseInt(row.quantity) || 0},
-                category = ${row.category || ""},
+                quantity_on_hand = ${parseInt(row.quantity) || 0},
+                quantity_available = ${parseInt(row.quantity) || 0},
                 updated_at = NOW()
             `;
             break;
           }
           case "order": {
             const id = row.id || crypto.randomUUID();
+            // items is jsonb; customer name goes inside it (orders table has no customer_name column)
+            const customerName = row.customer_name || row.customerName || "";
+            let itemsVal: any = row.items || [];
+            if (typeof itemsVal === "string") {
+              try { itemsVal = JSON.parse(itemsVal); } catch { itemsVal = [{ name: itemsVal }]; }
+            }
+            if (customerName && !Array.isArray(itemsVal)) {
+              itemsVal = { ...itemsVal, customer_name: customerName };
+            }
+            if (customerName && Array.isArray(itemsVal) && itemsVal.length === 0) {
+              itemsVal = [{ name: "Order item", customer_name: customerName }];
+            }
             await sql`
-              INSERT INTO orders (id, order_number, customer_name, status, total_amount, items, created_at)
+              INSERT INTO orders (id, order_number, status, total_amount, items, created_at)
               VALUES (
-                ${id}, ${row.order_number || row.orderNumber || ""}, ${row.customer_name || row.customerName || ""},
+                ${id}, ${row.order_number || row.orderNumber || ""},
                 ${row.status || "pending"}, ${parseFloat(row.total_amount) || 0},
-                ${row.items ? JSON.stringify(row.items) : "[]"}, NOW()
+                ${JSON.stringify(itemsVal)}::jsonb, NOW()
               )
               ON CONFLICT (id) DO UPDATE SET
                 status = ${row.status || "pending"},
+                items = ${JSON.stringify(itemsVal)}::jsonb,
                 updated_at = NOW()
             `;
             break;
@@ -119,15 +145,44 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function parseCSV(text: string): any[] {
+/** Split a CSV line into fields, respecting double-quoted values (incl. embedded commas). */
+function splitCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        // Doubled quote inside a quoted field is an escaped quote
+        if (line[i + 1] === '"') { current += '"'; i++; }
+        else inQuotes = false;
+      } else {
+        current += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      fields.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current);
+  return fields.map(f => f.trim());
+}
+
+export function parseCSV(text: string): any[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_"));
+  const headers = splitCSVLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9_]/g, "_"));
   const rows: any[] = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(",").map(v => v.trim().replace(/^"|"$/g, ""));
+    if (!lines[i].trim()) continue;
+    const values = splitCSVLine(lines[i]);
     const row: any = {};
     headers.forEach((h, j) => {
       row[h] = values[j] || "";

@@ -5,6 +5,16 @@
 
 import { neon } from "@neondatabase/serverless";
 import * as crypto from "node:crypto";
+import { pathToFileURL } from "node:url";
+
+/**
+ * Returns true when the current module is being run directly (e.g. `tsx index.ts`)
+ * rather than imported by the app. Each MCP server file guards its stdio bootstrap
+ * with this so importing the class as a library doesn't start an MCP process.
+ */
+export function isDirectRun(moduleUrl: string): boolean {
+  return !!process.argv[1] && moduleUrl === pathToFileURL(process.argv[1]).href;
+}
 
 export class LaneworkMCPServer {
   protected sql: ReturnType<typeof neon>;
@@ -20,6 +30,93 @@ export class LaneworkMCPServer {
     this.config = {};
   }
 
+  /** Idempotently create tables that MCP tools depend on (new domain tables). */
+  protected async ensureSchema(): Promise<void> {
+    const stmts = [
+      `CREATE TABLE IF NOT EXISTS eway_bills (
+        id UUID PRIMARY KEY,
+        ewb_no TEXT,
+        shipment_id UUID,
+        from_gstin TEXT,
+        to_gstin TEXT,
+        invoice_no TEXT,
+        invoice_value NUMERIC,
+        status TEXT DEFAULT 'generated',
+        valid_until TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS docks (
+        id UUID PRIMARY KEY,
+        warehouse_id TEXT,
+        name TEXT NOT NULL,
+        type TEXT DEFAULT 'dock',
+        capacity TEXT,
+        status TEXT DEFAULT 'available',
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS dock_bookings (
+        id UUID PRIMARY KEY,
+        warehouse_id TEXT,
+        dock_id TEXT,
+        carrier_name TEXT,
+        vehicle_reg TEXT,
+        booking_type TEXT,
+        scheduled_from TIMESTAMPTZ,
+        scheduled_to TIMESTAMPTZ,
+        status TEXT DEFAULT 'booked',
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS maintenance_schedules (
+        id UUID PRIMARY KEY,
+        vehicle_id TEXT,
+        type TEXT,
+        description TEXT,
+        scheduled_date DATE,
+        priority TEXT DEFAULT 'medium',
+        status TEXT DEFAULT 'scheduled',
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS invoices (
+        id UUID PRIMARY KEY,
+        invoice_number TEXT,
+        customer_name TEXT,
+        total_amount NUMERIC,
+        invoice_date TIMESTAMPTZ,
+        source TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS pincodes (
+        pincode TEXT PRIMARY KEY,
+        lat DOUBLE PRECISION,
+        lng DOUBLE PRECISION,
+        city TEXT,
+        state TEXT
+      )`,
+      `CREATE TABLE IF NOT EXISTS pick_verifications (
+        id UUID PRIMARY KEY,
+        order_id TEXT,
+        sku TEXT,
+        expected_qty INT,
+        scanned_qty INT,
+        location TEXT,
+        scanned_by TEXT,
+        verified BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      )`,
+    ];
+    for (const stmt of stmts) {
+      try {
+        await this.sql.unsafe(stmt);
+      } catch (e) {
+        console.error(`[${this.agentId}] ensureSchema failed for a statement:`, e);
+      }
+    }
+  }
+
   async loadConfig(): Promise<void> {
     try {
       const rows: any[] = await this.sql`
@@ -29,6 +126,8 @@ export class LaneworkMCPServer {
         this.config = rows[0].config || {};
       }
     } catch { /* table may not exist */ }
+    // Bootstrap tables MCP tools rely on (idempotent, non-fatal on failure)
+    await this.ensureSchema();
   }
 
   /** Safe API call — returns fallback or null when env vars missing, never throws */
@@ -74,8 +173,8 @@ export class LaneworkMCPServer {
     const id = crypto.randomUUID();
     try {
       await this.sql`
-        INSERT INTO agent_tasks (id, agent_id, action, status, input_data, created_at)
-        VALUES (${id}, ${this.agentId}, ${action}, ${status}, ${data ? JSON.stringify(data) : "{}"}, NOW())
+        INSERT INTO agent_tasks (id, agent_type, action_type, status, reasoning_trace, input_data, created_at, updated_at)
+        VALUES (${id}, ${this.agentId}, ${action}, ${status}, ${data ? JSON.stringify(data) : null}, ${JSON.stringify({})}::jsonb, NOW(), NOW())
       `;
     } catch (e) { console.error(`[${this.agentId}] Log fail:`, e); }
     return id;
@@ -84,7 +183,7 @@ export class LaneworkMCPServer {
   async logIntegrationEvent(integrationType: string, eventType: string, payload: any): Promise<void> {
     try {
       await this.sql`
-        INSERT INTO webhook_events (id, integration_type, event_type, payload, created_at)
+        INSERT INTO webhook_events (id, integration_id, event_type, payload, received_at)
         VALUES (${crypto.randomUUID()}, ${integrationType}, ${eventType}, ${JSON.stringify(payload)}, NOW())
       `;
     } catch (e) { console.error(`[${this.agentId}] Event log fail:`, e); }
@@ -112,7 +211,8 @@ export class LaneworkMCPServer {
       await this.sql`
         INSERT INTO shipments (id, tracking_number, carrier, status, origin, destination, customer_name, customer_phone, created_at)
         VALUES (${id}, ${data.trackingNumber}, ${data.carrier}, ${data.status || "pending"},
-          ${data.origin}, ${data.destination}, ${data.customerName || ""}, ${data.customerPhone || ""}, NOW())
+          ${JSON.stringify({ address: data.origin })}::jsonb, ${JSON.stringify({ address: data.destination })}::jsonb,
+          ${data.customerName || ""}, ${data.customerPhone || ""}, NOW())
       `;
     } catch (e) { console.error(`[${this.agentId}] Create shipment fail:`, e); }
     return id;
