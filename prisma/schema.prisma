@@ -768,4 +768,58 @@ model PickVerification {
   @@map("pick_verifications")
 }
 
+// ═══════════════════════════════════════════
+// Chat-First Interface (L-M0)
+// ═══════════════════════════════════════════
+
+model ChatThread {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String   @default("New conversation")
+  status    String   @default("active")
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("chat_threads")
+}
+
+model ChatMessage {
+  id         String   @id @default(uuid())
+  threadId   String   @map("thread_id")
+  role       String   // "user" | "assistant" | "system"
+  content    String
+  toolCalls  Json?    @map("tool_calls") // Array of ChatToolCall summaries
+  metadata   Json?    @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  thread    ChatThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  toolCallsData ChatToolCall[]
+
+  @@index([threadId, createdAt])
+  @@map("chat_messages")
+}
+
+model ChatToolCall {
+  id           String   @id @default(uuid())
+  messageId    String   @map("message_id")
+  integration  String   // e.g. "shiprocket", "tally_prime", "weather"
+  action       String   // e.g. "track_shipment", "sync_inventory"
+  input        Json?    @default("{}")
+  output       Json?    @default("{}")
+  mode         String   @default("simulated") // "live" | "simulated" | "db-fallback" | "error"
+  durationMs   Int?     @map("duration_ms")
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([integration, createdAt(sort: Desc)])
+  @@map("chat_tool_calls")
+}
+
 // Dashboard stats queried directly via SQL — not managed by Prisma

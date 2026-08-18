@@ -13,7 +13,8 @@ import { GlobalSearch } from "@/components/ui/global-search";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 const primaryNav = [
-  { href: "/copilot", label: "Chat", icon: MessageSquare },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/copilot", label: "Copilot (Legacy)", icon: Bot },
 ];
 
 const secondaryNav = [
@@ -43,10 +44,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (mounted && !loading && !user) { router.push("/login"); }
   }, [mounted, loading, user, router]);
 
-  // Redirect /dashboard to /copilot (chat is the primary interface)
+  // Redirect /dashboard to /chat (chat is the primary interface)
   useEffect(() => {
     if (mounted && pathname === "/dashboard") {
-      router.replace("/copilot");
+      router.replace("/chat");
     }
   }, [mounted, pathname, router]);
 
@@ -81,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}>
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-          <Link href="/copilot" className="flex items-center gap-2">
+          <Link href="/chat" className="flex items-center gap-2">
             <div className="grid h-7 w-7 place-items-center rounded-md bg-black">
               <div className="h-3.5 w-3.5 rounded-sm bg-white" style={{ transform: "rotate(45deg)" }} />
             </div>

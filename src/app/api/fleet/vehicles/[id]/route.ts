@@ -54,4 +54,4 @@ export const DELETE = withAuth(async (_request, _user, ctx) => {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

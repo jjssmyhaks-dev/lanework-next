@@ -17,7 +17,7 @@ import crypto from "crypto";
 
 export class WeatherMCP extends LaneworkMCPServer {
   private apiKey: string = "";
-  private baseUrl = "https://api.openweathermap.org/data/3.0";
+  private baseUrl = "https://api.openweathermap.org/data/2.5";
 
   constructor() { super("route-optimization"); }
 
@@ -143,21 +143,29 @@ export class WeatherMCP extends LaneworkMCPServer {
     }
 
     try {
-      const data = await this.weatherReq("/onecall", { lat: String(lat), lon: String(lng), exclude: "current,minutely,hourly,daily", units: "metric" });
-      const alerts = (data.alerts || []) as any[];
-      await this.logIntegrationEvent("weather", "alerts", { region, alertCount: alerts.length });
+      // Free tier: use /data/2.5/weather to check extreme conditions at state capital
+      const data = await this.weatherReq("/weather", { lat: String(lat), lon: String(lng), units: "metric" });
+      const alerts: Array<{ type: string; severity: string; title: string; description: string; startTime: string; endTime: string; affectedAreas: string[] }> = [];
+      const now = new Date().toISOString();
 
-      return alerts.map(a => ({
-        type: a.tags?.[0] || "weather",
-        severity: a.tags?.includes("Extreme") ? "extreme" : a.tags?.includes("Severe") ? "severe" : "moderate",
-        title: a.event || "",
-        description: a.description || "",
-        startTime: new Date((a.start || 0) * 1000).toISOString(),
-        endTime: new Date((a.end || 0) * 1000).toISOString(),
-        affectedAreas: [region],
-      }));
+      // Generate alerts based on actual weather data thresholds
+      if ((data.main?.temp || 0) > 44) {
+        alerts.push({ type: "heatwave", severity: "extreme", title: `Heatwave Alert — ${region}`, description: `Temperature at ${data.main.temp}°C. Avoid midday deliveries, ensure vehicle coolant and driver hydration.`, startTime: now, endTime: now, affectedAreas: [region] });
+      }
+      if ((data.rain?.["1h"] || data.rain?.["3h"] || 0) > 20) {
+        alerts.push({ type: "heavy_rain", severity: "severe", title: `Heavy Rain Alert — ${region}`, description: `Rainfall ${(data.rain?.["1h"] || data.rain?.["3h"] || 0)}mm. Flooding risk on low-lying routes. Consider delaying dispatch.`, startTime: now, endTime: now, affectedAreas: [region] });
+      }
+      if ((data.wind?.speed || 0) * 3.6 > 60) {
+        alerts.push({ type: "storm", severity: "severe", title: `High Wind Alert — ${region}`, description: `Wind speed ${Math.round(data.wind.speed * 3.6)} km/h. Unsafe for high-body vehicles.`, startTime: now, endTime: now, affectedAreas: [region] });
+      }
+      if (data.visibility < 500) {
+        alerts.push({ type: "fog", severity: "moderate", title: `Low Visibility — ${region}`, description: `Visibility ${data.visibility}m. Reduce speed, use fog lights.`, startTime: now, endTime: now, affectedAreas: [region] });
+      }
+
+      await this.logIntegrationEvent("weather", "alerts", { region, alertCount: alerts.length });
+      return alerts;
     } catch {
-      // Graceful fallback: return empty — API might be rate-limited
+      // Graceful fallback: return empty
       return [];
     }
   }
@@ -166,20 +174,30 @@ export class WeatherMCP extends LaneworkMCPServer {
     date: string; tempMin: number; tempMax: number; conditions: string;
     rainMm: number; humidity: number; windKph: number; suitable: boolean;
   }>> {
-    const data = await this.weatherReq("/forecast/daily", { lat: String(lat), lon: String(lng), cnt: String(Math.min(days, 7)), units: "metric" });
+    // Free tier: /forecast gives 3-hour intervals for 5 days
+    const data = await this.weatherReq("/forecast", { lat: String(lat), lon: String(lng), units: "metric", cnt: String(Math.min(days * 8, 40)) });
 
-    return (data.list || data.daily || []).map((d: any) => {
-      const rain = (d.rain || 0);
-      const wind = (d.wind_speed || d.speed || 0) * 3.6;
+    // Group by date and aggregate daily min/max
+    const byDate: Record<string, any[]> = {};
+    for (const entry of data.list || []) {
+      const date = new Date(entry.dt * 1000).toISOString().slice(0, 10);
+      if (!byDate[date]) byDate[date] = [];
+      byDate[date].push(entry);
+    }
+
+    return Object.entries(byDate).slice(0, days).map(([date, entries]) => {
+      const temps = entries.map(e => e.main?.temp || 0);
+      const rain = entries.reduce((sum, e) => sum + (e.rain?.["3h"] || 0), 0);
+      const wind = Math.max(...entries.map(e => (e.wind?.speed || 0) * 3.6));
       return {
-        date: new Date((d.dt || 0) * 1000).toISOString().slice(0, 10),
-        tempMin: d.temp?.min || 0,
-        tempMax: d.temp?.max || 0,
-        conditions: d.weather?.[0]?.description || "",
-        rainMm: rain,
-        humidity: d.humidity || 0,
+        date,
+        tempMin: Math.round(Math.min(...temps)),
+        tempMax: Math.round(Math.max(...temps)),
+        conditions: entries[Math.floor(entries.length / 2)]?.weather?.[0]?.description || "",
+        rainMm: Math.round(rain * 10) / 10,
+        humidity: Math.round(entries.reduce((s, e) => s + (e.main?.humidity || 0), 0) / entries.length),
         windKph: Math.round(wind * 10) / 10,
-        suitable: rain < 15 && wind < 60 && (d.temp?.max || 100) < 48,
+        suitable: rain < 15 && wind < 60 && Math.max(...temps) < 48,
       };
     });
   }
