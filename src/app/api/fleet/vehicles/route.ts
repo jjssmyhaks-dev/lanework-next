@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
+import { createVehicleSchema, validateBody } from "@/lib/validations";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -22,18 +23,11 @@ export const GET = withAuth(async (request) => {
 
 export const POST = withAuth(async (request) => {
   try {
-    const body = await request.json();
-    const { plate, type, status, mileageKm, userId } = body;
-
-    if (!plate || !type) {
-      return NextResponse.json(
-        { error: "Missing required fields: plate, type" },
-        { status: 400 }
-      );
-    }
+    const validation = await validateBody(request, createVehicleSchema);
+    if (!validation.success) return validation.error;
+    const { plate, type, status, mileageKm } = validation.data;
 
     const id = crypto.randomUUID();
-    const user_id = userId || "default";
 
     await sql`
       INSERT INTO fleet_vehicles (id, user_id, plate, type, status, mileage_km)

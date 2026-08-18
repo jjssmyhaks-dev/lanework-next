@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
+import { createWarehouseSchema, validateBody } from "@/lib/validations";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -22,18 +23,11 @@ export const GET = withAuth(async (request) => {
 
 export const POST = withAuth(async (request) => {
   try {
-    const body = await request.json();
-    const { type, priority, assignedTo, dock, metadata, userId } = body;
-
-    if (!type) {
-      return NextResponse.json(
-        { error: "Missing required field: type" },
-        { status: 400 }
-      );
-    }
+    const validation = await validateBody(request, createWarehouseSchema);
+    if (!validation.success) return validation.error;
+    const { type, priority, assignedTo, dock, metadata } = validation.data;
 
     const id = crypto.randomUUID();
-    const user_id = userId || "default";
 
     const metadataJson = metadata ? JSON.stringify(metadata) : null;
 

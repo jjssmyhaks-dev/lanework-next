@@ -14,6 +14,8 @@ import { INTEGRATION_SETUP, IntegrationSetup } from "@/lib/integration-setup";
 import MessageBubble from "@/components/ui/chat/message-bubble";
 import QuickActionsBar from "@/components/ui/chat/quick-actions-bar";
 import IntegrationPills from "@/components/ui/chat/integration-pills";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { detectIntent } from "@/lib/intent-detection";
 
 // ── Types ──
 
@@ -96,8 +98,16 @@ function formatTime(iso: string): string {
   }
 }
 
-function loadHistory(): Message[] {
+async function loadHistory(): Promise<Message[]> {
   if (typeof window === "undefined") return [];
+  try {
+    const res = await fetch("/api/chat/history?limit=50");
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.messages) && data.messages.length > 0) return data.messages;
+    }
+  } catch {}
+  // Fallback to localStorage if server unavailable
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
@@ -107,11 +117,23 @@ function loadHistory(): Message[] {
   return [];
 }
 
-function saveHistory(messages: Message[]) {
+async function saveHistory(messages: Message[]) {
   if (typeof window === "undefined") return;
+  const toSave = messages.slice(-50);
+  // Save to localStorage immediately (optimistic)
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-50)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch {}
+  // Sync to server in background (non-blocking)
+  try {
+    await fetch("/api/chat/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: toSave }),
+    });
+  } catch {
+    // Server sync failed — localStorage fallback is still valid
+  }
 }
 
 function exportConversation(messages: Message[]): string {
@@ -128,98 +150,19 @@ function exportConversation(messages: Message[]): string {
     .join("\n\n---\n\n");
 }
 
-// ── Intent Detection ──
-
-interface DetectedIntent {
-  action: string;
-  integration?: string;
-  params: Record<string, string>;
-}
-
-function detectIntent(text: string): DetectedIntent | null {
-  const t = text.toLowerCase();
-
-  // Track shipment
-  const trackMatch =
-    t.match(/track\s+(?:shipment\s+)?([\w-]+)/i) ||
-    t.match(/where\s+(?:is|are)\s+(?:my\s+)?(?:shipment\s+)?([\w-]+)/i) ||
-    t.match(/status\s+(?:of\s+)?(?:shipment\s+)?([\w-]+)/i);
-  if (trackMatch) {
-    const trackingNumber = trackMatch[1].replace(/[#?!.,;:\s]/g, "");
-    return {
-      action: "track_shipment",
-      integration: "shiprocket",
-      params: { tracking_number: trackingNumber, awb: trackingNumber },
-    };
-  }
-
-  // Inventory check
-  if (t.includes("inventory") || t.includes("stock level") || t.includes("low stock") || t.includes("check inventory") || t.includes("what's in stock") || t.includes("quantity of")) {
-    return { action: "sync_inventory", integration: "tally_prime", params: {} };
-  }
-
-  // Route optimization
-  if (t.includes("optimize route") || t.includes("plan route") || t.includes("best route") || t.includes("delivery route") || t.includes("route for")) {
-    return { action: "optimize_route", params: {} };
-  }
-
-  // Generate report
-  if (t.includes("generate report") || t.includes("summary report") || t.includes("warehouse summary") || t.includes("task summary") || t.includes("performance report")) {
-    return { action: "generate_report", params: {} };
-  }
-
-  // Connect integration
-  if (t.match(/(?:connect|setup|set up|configure)\s+(.+)/i)) {
-    const name = t.match(/(?:connect|setup|set up|configure)\s+(.+)/i)![1].trim();
-    const found = Object.values(INTEGRATION_SETUP).find(
-      (i) => i.name.toLowerCase().includes(name) || i.id.toLowerCase().includes(name) || name.includes(i.name.toLowerCase())
-    );
-    if (found) return { action: "connect_integration", integration: found.id, params: {} };
-  }
-
-  // Specific actions per integration
-  if (t.includes("sync tally") || t.includes("tally sync") || t.includes("tally inventory")) {
-    return { action: "sync_inventory", integration: "tally_prime", params: {} };
-  }
-  if (t.includes("cod reconciliation") || t.includes("razorpay") || t.includes("payment")) {
-    return { action: "reconcile", integration: "razorpay", params: {} };
-  }
-  if (t.includes("gstin") || t.includes("validate gst") || t.includes("gst validation")) {
-    const gstMatch = t.match(/([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])/i);
-    return { action: "validate_gstin", integration: "gstn_eway_bill", params: { gstin: gstMatch ? gstMatch[1] : "" } };
-  }
-  if (t.includes("whatsapp") || t.includes("send notification") || t.includes("notify customer")) {
-    return { action: "test_whatsapp", integration: "whatsapp", params: {} };
-  }
-  if (t.includes("google sheet") || t.includes("sync sheet") || t.includes("spreadsheet")) {
-    return { action: "sync_sheet", integration: "google_sheets", params: {} };
-  }
-  if (t.includes("webhook")) {
-    return { action: "test_webhook", integration: "generic_webhook", params: {} };
-  }
-  if (t.includes("shopify") || t.includes("sync shopify")) {
-    return { action: "sync_orders", integration: "shopify", params: {} };
-  }
-  if (t.includes("woocommerce") || t.includes("woo commerce")) {
-    return { action: "sync_orders", integration: "woocommerce", params: {} };
-  }
-  if (t.includes("fleet") || t.includes("vehicle") || t.includes("track vehicle")) {
-    return { action: "track_all", integration: "loconav", params: {} };
-  }
-  if (t.includes("export") && (t.includes("csv") || t.includes("shipments") || t.includes("inventory"))) {
-    return { action: "export_csv", params: {} };
-  }
-
-  return null;
-}
-
 // ── Main Component ──
 
 export default function CopilotPage() {
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = loadHistory();
-    return saved.length > 0 ? saved : [WELCOME_MESSAGE];
-  });
+  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+
+  // Load chat history from server on mount
+  useEffect(() => {
+    loadHistory().then((saved) => {
+      if (saved.length > 0) setMessages(saved);
+      setHistoryLoaded(true);
+    });
+  }, []);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [connection, setConnection] = useState<ConnectionState>({
@@ -460,6 +403,7 @@ export default function CopilotPage() {
   };
 
   return (
+    <ErrorBoundary>
     <div className="flex flex-col h-full bg-white" style={{ fontFamily: "system-ui, sans-serif" }}>
       {/* Header */}
       <header className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white flex-shrink-0">
@@ -718,5 +662,6 @@ export default function CopilotPage() {
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }

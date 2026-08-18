@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { withAuth } from "@/lib/auth";
+import { z } from "zod";
+import { validateBody } from "@/lib/validations";
 
 // Tier 1 — Universal (works regardless of what customer has)
 // Tier 2 — High-value India-specific
@@ -191,14 +193,16 @@ export const GET = withAuth(async (request) => {
   }
 });
 
+const createIntegrationSchema = z.object({
+  type: z.string().min(1, "type is required"),
+  config: z.record(z.unknown()).optional(),
+});
+
 export const POST = withAuth(async (request) => {
   try {
-    const body = await request.json();
-    const { type, config } = body;
-
-    if (!type) {
-      return NextResponse.json({ error: "type is required" }, { status: 400 });
-    }
+    const validation = await validateBody(request, createIntegrationSchema);
+    if (!validation.success) return validation.error;
+    const { type, config } = validation.data;
 
     const catalogEntry = CATALOG.find(c => c.id === type);
     if (!catalogEntry) {

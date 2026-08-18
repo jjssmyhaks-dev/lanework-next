@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { GlobalSearch } from "@/components/ui/global-search";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 const primaryNav = [
   { href: "/copilot", label: "Chat", icon: MessageSquare },
@@ -199,7 +200,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Page content — full height for chat */}
         <main className="flex-1 overflow-hidden bg-gray-50">
-          <div className="h-full">{children}</div>
+          <div className="h-full"><ErrorBoundary>{children}</ErrorBoundary></div>
         </main>
       </div>
     </div>
