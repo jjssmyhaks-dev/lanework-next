@@ -340,6 +340,64 @@ All MCP servers extend `LaneworkMCPServer` with graceful fallback: when an exter
 
 ---
 
+## Pricing (Indian Market)
+
+All prices in ₹ INR + applicable GST (18%). Designed for Indian MSMEs — no USD conversion, no hidden fees.
+
+| Plan | Monthly | Yearly (Save 2 months) | Per Extra User | Target Audience |
+|------|---------|----------------------|----------------|------------------|
+| **Free Trial** | ₹0 (7 days) | — | — | Try before you buy |
+| **Starter** | ₹999/mo (~₹33/day) | ₹9,999/yr | ₹199/mo | Small businesses shipping 1-50 orders/day |
+| **Growth** | ₹2,999/mo (~₹100/day) | ₹29,999/yr | ₹299/mo | Growing businesses with fleet + e-commerce |
+| **Enterprise** | ₹7,999/mo (~₹267/day) | ₹79,999/yr | ₹399/mo | Large operations with ERP + multiple warehouses |
+
+### What's included per plan
+
+| Feature | Free | Starter | Growth | Enterprise |
+|---------|------|---------|--------|------------|
+| AI Chat | 25/day | 200/day | Unlimited | Unlimited |
+| Team members | 1 | 3 | 10 | 50 |
+| Shipments/month | 50 | 500 | 5,000 | Unlimited |
+| Integrations | 2 | 5 | Unlimited | Unlimited |
+| Shiprocket | ✅ | ✅ | ✅ | ✅ |
+| WhatsApp | ❌ | ✅ | ✅ | ✅ |
+| TallyPrime | ❌ | ✅ | ✅ | ✅ |
+| GST e-Way Bill | ❌ | ✅ | ✅ | ✅ |
+| Google Sheets | ❌ | ❌ | ✅ | ✅ |
+| Shopify/WooCommerce | ❌ | ❌ | ✅ | ✅ |
+| FedEx (international) | ❌ | ❌ | ✅ | ✅ |
+| Fleet tracking | ❌ | ❌ | ✅ | ✅ |
+| Compliance | ❌ | ❌ | ✅ | ✅ |
+| ERP (SAP B1) | ❌ | ❌ | ❌ | ✅ |
+| API access | ❌ | ❌ | ✅ | ✅ |
+| White-label | ❌ | ❌ | ❌ | ✅ |
+| Priority support | ❌ | ❌ | ✅ | ✅ |
+| Dedicated manager | ❌ | ❌ | ❌ | ✅ |
+
+### Infrastructure Cost (per user/month)
+
+| Plan | Revenue | Infra Cost | Gross Margin |
+|------|---------|-----------|-------------|
+| Starter | ₹999 | ₹27 | **97%** |
+| Growth | ₹2,999 | ₹70 | **98%** |
+| Enterprise | ₹7,999 | ₹262 | **97%** |
+
+→ All plans exceed the 75% gross margin target.
+→ See [Pricing](docs/PRICING.md) for full breakdown.
+
+---
+
+## Documentation
+
+| Document | Audience | Content |
+|----------|----------|---------|
+| [User Guide](docs/USER-GUIDE.md) | Non-technical users | Step-by-step: sign up, connect tools, common tasks, troubleshooting |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Operators / DevOps | Vercel deploy, env vars, health checks, rollback, monitoring |
+| [API Keys Reference](docs/API-KEYS.md) | Everyone | Every API key needed, with step-by-step setup for all 15 integrations |
+| [Production Audit](audit/production-readiness.md) | Developers | Full audit: hardcoded values, broken features, MCP status |
+
+---
+
 ## Contributing
 
 1. Fork the repo

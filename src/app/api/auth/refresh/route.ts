@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     const { sub: userId, family, fingerprint, jti } = decoded;
 
     // Check blacklist (tokens from previous rotations are blacklisted)
-    if (isTokenBlacklisted(jti)) {
+    if (await isTokenBlacklisted(jti)) {
       return NextResponse.json(
         { error: "Refresh token has been revoked" },
         { status: 401 }

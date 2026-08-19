@@ -201,7 +201,7 @@ describe("MCP Adapter — callMcpAction", () => {
 
   it("returns graceful simulated result when MCP init fails", async () => {
     // Override the mock to throw on init
-    const { ShiprocketMCP } = await import("../../mcp-servers/shiprocket/index");
+    const { ShiprocketMCP } = await import("../mcp-servers/shiprocket/index");
     const originalInit = ShiprocketMCP.prototype.init;
     ShiprocketMCP.prototype.init = async () => { throw new Error("DB connection failed"); };
     

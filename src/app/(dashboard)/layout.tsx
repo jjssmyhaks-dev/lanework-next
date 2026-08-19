@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   MessageSquare, LayoutDashboard, Truck, Package, Route, Warehouse, Users,
-  LogOut, Menu, X, Bot, Shield, BookOpen, Plug, ChevronDown, Settings
+  LogOut, Menu, X, Bot, Shield, BookOpen, Plug, ChevronDown, Settings, IndianRupee
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -28,6 +28,7 @@ const secondaryNav = [
   { href: "/customer", label: "Customers", icon: BookOpen },
   { href: "/integrations", label: "Integrations", icon: Plug },
   { href: "/onboarding", label: "Setup", icon: Shield },
+  { href: "/pricing", label: "Pricing", icon: IndianRupee },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
