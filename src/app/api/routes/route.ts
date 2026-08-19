@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { createRouteSchema, validateBody } from "@/lib/validations";
 import { parsePagination, paginate } from "@/lib/pagination";
+import { auditLog, extractRequestMeta } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -34,7 +36,7 @@ export const GET = withAuth(async (request) => {
   }
 });
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     const validation = await validateBody(request, createRouteSchema);
     if (!validation.success) return validation.error;
@@ -62,9 +64,20 @@ export const POST = withAuth(async (request) => {
       SELECT * FROM routes WHERE id = ${id}
     `;
 
+    logger.info({ id, name, userId: user.id }, "Route created");
+    auditLog({
+      userId: user.id,
+      action: "create",
+      entityType: "route",
+      entityId: id,
+      newValues: { name, origin, destination, distance: distanceVal, minutes: minutesVal },
+      ...extractRequestMeta(request),
+    });
+
     return NextResponse.json(toApiShape(route), { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
+    logger.error({ error: message }, "Route creation failed");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 });

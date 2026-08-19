@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { createCustomerSchema, validateBody } from "@/lib/validations";
 import { parsePagination, paginate } from "@/lib/pagination";
+import { auditLog, extractRequestMeta } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -21,7 +23,7 @@ export const GET = withAuth(async (request) => {
   }
 });
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     const validation = await validateBody(request, createCustomerSchema);
     if (!validation.success) return validation.error;
@@ -40,9 +42,20 @@ export const POST = withAuth(async (request) => {
       SELECT * FROM customers WHERE id = ${id}
     `;
 
+    logger.info({ id, name: customerNameVal, userId: user.id }, "Customer created");
+    auditLog({
+      userId: user.id,
+      action: "create",
+      entityType: "customer",
+      entityId: id,
+      newValues: { name: customerNameVal, email, phone },
+      ...extractRequestMeta(request),
+    });
+
     return NextResponse.json(customer, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
+    logger.error({ error: message }, "Customer creation failed");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 });

@@ -88,7 +88,7 @@ export const POST = withAuth(async (request, user) => {
       SELECT * FROM shipments WHERE id = ${id}
     `;
 
-    logger.info("Shipment created", { id, trackingNumber: tn, carrier, userId: user.id });
+    logger.info({ id, trackingNumber: tn, carrier, userId: user.id }, "Shipment created");
 
     // Audit log (best-effort, non-blocking)
     auditLog({
@@ -103,7 +103,7 @@ export const POST = withAuth(async (request, user) => {
     return NextResponse.json(toApiShape(shipment), { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
-    logger.error("Shipment creation failed", { error: message });
+    logger.error({ error: message }, "Shipment creation failed");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 });

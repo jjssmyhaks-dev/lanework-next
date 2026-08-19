@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { createWarehouseSchema, validateBody } from "@/lib/validations";
 import { parsePagination, paginate } from "@/lib/pagination";
+import { auditLog, extractRequestMeta } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -44,9 +46,20 @@ export const POST = withAuth(async (request, user) => {
       SELECT * FROM warehouse WHERE id = ${id}
     `;
 
+    logger.info({ id, type, userId: user_id }, "Warehouse task created");
+    auditLog({
+      userId: user_id,
+      action: "create",
+      entityType: "warehouse_task",
+      entityId: id,
+      newValues: { type, priority, dock },
+      ...extractRequestMeta(request),
+    });
+
     return NextResponse.json(task, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
+    logger.error({ error: message }, "Warehouse task creation failed");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 });

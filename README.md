@@ -280,7 +280,8 @@ All MCP servers extend `LaneworkMCPServer` with graceful fallback: when an exter
 | AI | Cloudflare Workers AI (Llama 3 8B) |
 | Agent Framework | MCP (Model Context Protocol) — 15 servers, 58 tools |
 | Search | PostgreSQL full-text (`tsvector`/`tsquery`), `⌘K` global search |
-| Validation | Zod v4 schemas on all mutation endpoints |
+| Validation | Zod v4 + react-hook-form (frontend) + Zod schemas (API) + body size limits |
+| Logging | Pino JSON logger with redaction, audit logs to DB |
 | Testing | Vitest — 52 tests, 80% coverage threshold |
 | CI/CD | GitHub Actions → Vercel |
 | Monitoring | Sentry SDK |
@@ -294,35 +295,38 @@ All MCP servers extend `LaneworkMCPServer` with graceful fallback: when an exter
 
 | Feature | Status | Details |
 |---------|--------|---------|
-| JWT Auth | ✅ | Refresh tokens, token family theft detection, blacklist, logout-everywhere |
+| JWT Auth | ✅ | Refresh tokens, token family theft detection, DB-backed blacklist, logout-everywhere |
+| CORS | ✅ | Middleware-level origin enforcement via `CORS_ORIGINS` env var |
+| Security Headers | ✅ | CSP, X-Frame-Options, HSTS, X-Content-Type-Options, Permissions-Policy |
 | Rate Limiting | ✅ | Per-route: `/api/ai` 10/min, `/api/integrations` 30/min, `/api/chat` 20/min |
-| Input Validation | ✅ | Zod v4 schemas on all POST routes (shipment, customer, inventory, warehouse, routes, fleet, integrations, CSV, search) |
+| Input Validation | ✅ | Zod v4 schemas on all POST routes + body size limits (1MB) + content-type check |
+| Frontend Validation | ✅ | react-hook-form + Zod on login & register with inline error messages |
 | Error Boundaries | ✅ | React ErrorBoundary on dashboard layout + chat page |
 | Error Monitoring | ✅ | Sentry SDK with source maps |
-| Type Safety | ✅ | Full TypeScript — 0 errors, strict mode |
+| Structured Logging | ✅ | Pino JSON logger with pretty-print in dev, redaction of sensitive fields |
+| Audit Logging | ✅ | All 7 mutation routes write to `audit_logs` table with IP + user-agent |
+| Pagination | ✅ | All 7 list GET endpoints support `?page=&limit=` (default 20, max 100) |
+| Env Validation | ✅ | Startup validation with clear error messages — fails hard in production |
+| Request IDs | ✅ | Every request gets a UUID `X-Request-ID` header for distributed tracing |
+| DB Migrations | ✅ | Prisma migrations baseline established (`prisma migrate dev` for new changes) |
+| SEO | ✅ | Full metadata: OpenGraph, Twitter cards, robots, keywords, title template |
+| Type Safety | ✅ | Full TypeScript — 0 errors |
 | Test Suite | ✅ | 52 passing tests (unit + integration) |
 | Graceful Degradation | ✅ | All 15 MCPs return simulated data when APIs unavailable — app never crashes |
 | Chat History | ✅ | Server-side persistence (GET/POST/DELETE with auth) |
 | Chat Orchestrator | ✅ | Intent detection for 20+ intents across all 15 integrations |
 | Full-Text Search | ✅ | PostgreSQL tsvector across shipments, inventory, customers |
 
-### ⚠️ Gaps to Address Before Scaling
+### ⚠️ Remaining Gaps (Nice-to-have)
 
 | Priority | Gap | Impact | Effort |
 |----------|-----|--------|--------|
-| **P1** | No CORS configuration | Any origin can call your API | 30 min |
-| **P1** | No CSP/security headers | XSS vulnerability | 1 hr |
-| **P1** | Token blacklist in-memory | Cold starts lose blacklist | 2 hrs |
-| **P2** | No pagination on list endpoints | Slow with large datasets | 2 hrs |
-| **P2** | No request body size limits | DoS via large payloads | 30 min |
-| **P2** | No structured logging | Hard to debug production issues | 2 hrs |
-| **P2** | `prisma db push` instead of `migrate` | Schema changes not version-controlled | 1 hr |
 | **P3** | No OpenAPI/Swagger spec | Hard for third-party integrators | 4 hrs |
-| **P3** | No CSRF protection | Vulnerable to cross-site requests | 2 hrs |
-| **P3** | No frontend form validation | Bad UX on validation errors | 3 hrs |
-| **P3** | No SEO meta tags | Poor discoverability | 1 hr |
-| **P3** | No image optimization | Slow page loads | 1 hr |
+| **P3** | No CSRF protection on POST routes | Vulnerable to cross-site requests | 2 hrs |
+| **P3** | No image optimization (`next/image`) | Slow page loads | 1 hr |
 | **P3** | No i18n (Hindi/regional) | Limited accessibility | 1 day |
+| **P3** | No PWA/offline support | App doesn't work offline | 2 days |
+| **P3** | No dark mode | Single theme only | 4 hrs |
 
 ---
 
@@ -342,7 +346,7 @@ All MCP servers extend `LaneworkMCPServer` with graceful fallback: when an exter
 2. Create a feature branch: `git checkout -b feat/my-feature`
 3. Make your changes
 4. Run tests: `npm test`
-5. Run typecheck: `npx tsc --noEmit`
+5. Run typecheck: `npm run typecheck`
 6. Commit: `git commit -m "feat: description"`
 7. Push: `git push origin feat/my-feature`
 8. Open a Pull Request

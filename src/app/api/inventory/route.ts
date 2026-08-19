@@ -44,7 +44,7 @@ export const POST = withAuth(async (request, user) => {
       SELECT * FROM inventory WHERE id = ${id}
     `;
 
-    logger.info("Inventory item created", { id, sku, name, userId: user.id });
+    logger.info({ id, sku, name, userId: user.id }, "Inventory item created");
     auditLog({
       userId: user.id,
       action: "create",
@@ -57,7 +57,7 @@ export const POST = withAuth(async (request, user) => {
     return NextResponse.json(item, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
-    logger.error("Inventory creation failed", { error: message });
+    logger.error({ error: message }, "Inventory creation failed");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 });

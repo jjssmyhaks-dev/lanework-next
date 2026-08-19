@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { createVehicleSchema, validateBody } from "@/lib/validations";
 import { parsePagination, paginate } from "@/lib/pagination";
+import { auditLog, extractRequestMeta } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -42,9 +44,20 @@ export const POST = withAuth(async (request, user) => {
       SELECT * FROM fleet_vehicles WHERE id = ${id}
     `;
 
+    logger.info({ id, plate, userId }, "Vehicle created");
+    auditLog({
+      userId,
+      action: "create",
+      entityType: "fleet_vehicle",
+      entityId: id,
+      newValues: { plate, type, status },
+      ...extractRequestMeta(request),
+    });
+
     return NextResponse.json(vehicle, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
+    logger.error({ error: message }, "Vehicle creation failed");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 });

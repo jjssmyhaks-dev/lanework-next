@@ -1,77 +1,46 @@
 /**
- * Structured logger for Lanework.
- * Outputs JSON in production, human-readable in development.
- * Replaces console.error/console.log across the codebase.
+ * Structured logger for Lanework — powered by Pino.
+ * Outputs JSON in production, pretty-printed in development.
+ *
+ * Usage:
+ *   import { logger } from "@/lib/logger";
+ *   logger.info("Shipment created", { id, carrier });
+ *   const child = logger.child({ module: "orchestrator" });
+ *   child.error("Tool call failed", { error: err.message });
  */
 
-type LogLevel = "debug" | "info" | "warn" | "error";
+import pino from "pino";
 
-interface LogEntry {
-  level: LogLevel;
-  time: string;
-  msg: string;
-  [key: string]: unknown;
-}
+const isDev = process.env.NODE_ENV !== "production";
 
-const LOG_LEVELS: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
+export const logger = pino({
+  level: process.env.LOG_LEVEL || (isDev ? "debug" : "info"),
 
-const currentLevel: LogLevel =
-  (process.env.LOG_LEVEL as LogLevel) || (process.env.NODE_ENV === "production" ? "info" : "debug");
+  // Pretty-print in development, JSON in production
+  ...(isDev
+    ? {
+        transport: {
+          target: "pino-pretty",
+          options: {
+            colorize: true,
+            translateTime: "HH:MM:ss",
+            ignore: "pid,hostname",
+          },
+        },
+      }
+    : {}),
 
-function shouldLog(level: LogLevel): boolean {
-  return LOG_LEVELS[level] >= LOG_LEVELS[currentLevel];
-}
-
-function formatEntry(entry: LogEntry): string {
-  if (process.env.NODE_ENV === "production") {
-    return JSON.stringify(entry);
-  }
-  // Dev: human-readable with colors
-  const { level, time, msg, ...rest } = entry;
-  const color =
-    level === "error" ? "\x1b[31m" :
-    level === "warn" ? "\x1b[33m" :
-    level === "info" ? "\x1b[36m" : "\x1b[90m";
-  const reset = "\x1b[0m";
-  const extra = Object.keys(rest).length ? ` ${JSON.stringify(rest)}` : "";
-  return `${color}[${time}] ${level.toUpperCase()}${reset} ${msg}${extra}`;
-}
-
-function log(level: LogLevel, msg: string, data?: Record<string, unknown>) {
-  if (!shouldLog(level)) return;
-  const entry: LogEntry = {
-    level,
-    time: new Date().toISOString(),
-    msg,
-    ...data,
-  };
-  const formatted = formatEntry(entry);
-  if (level === "error") console.error(formatted);
-  else if (level === "warn") console.warn(formatted);
-  else console.log(formatted);
-}
-
-export const logger = {
-  debug: (msg: string, data?: Record<string, unknown>) => log("debug", msg, data),
-  info: (msg: string, data?: Record<string, unknown>) => log("info", msg, data),
-  warn: (msg: string, data?: Record<string, unknown>) => log("warn", msg, data),
-  error: (msg: string, data?: Record<string, unknown>) => log("error", msg, data),
-
-  /** Create a child logger with a fixed context prefix */
-  child(context: Record<string, unknown>) {
-    return {
-      debug: (msg: string, data?: Record<string, unknown>) => log("debug", msg, { ...context, ...data }),
-      info: (msg: string, data?: Record<string, unknown>) => log("info", msg, { ...context, ...data }),
-      warn: (msg: string, data?: Record<string, unknown>) => log("warn", msg, { ...context, ...data }),
-      error: (msg: string, data?: Record<string, unknown>) => log("error", msg, { ...context, ...data }),
-    };
+  // Base context for all log entries
+  base: {
+    service: "lanework",
   },
-};
+
+  // Redact sensitive fields
+  redact: {
+    paths: ["password", "password_hash", "authorization", "cookie", "token", "secret", "api_key", "api_secret"],
+    censor: "[REDACTED]",
+  },
+});
 
 /**
  * Timing helper — returns a function that logs duration when called.
@@ -86,6 +55,6 @@ export function timer(label: string): (data?: Record<string, unknown>) => void {
   const start = performance.now();
   return (data?: Record<string, unknown>) => {
     const duration = Math.round(performance.now() - start);
-    logger.info(`${label} completed`, { durationMs: duration, ...data });
+    logger.info({ durationMs: duration, ...data }, `${label} completed`);
   };
 }
