@@ -3,7 +3,14 @@
  *
  * Designed for Indian MSMEs — INR pricing, GST extra, 75%+ gross margin.
  * Plans: Free (7-day trial), Starter (₹999/mo), Growth (₹2,999/mo), Enterprise (₹7,999/mo)
+ *
+ * AI Cost Reference (Cloudflare Workers AI — Llama 3 8B):
+ *   Input:  ~$0.011/M tokens → ~₹0.92/M tokens
+ *   Output: ~$0.033/M tokens → ~₹2.75/M tokens
+ *   Average conversation: ~2K input + ~1K output tokens = ~₹0.005/conversation (~₹0.5/paisa)
  */
+
+import { neon } from "@neondatabase/serverless";
 
 export type PlanId = "free" | "starter" | "growth" | "enterprise";
 
@@ -62,9 +69,9 @@ export const PLANS: Record<PlanId, {
   id: PlanId;
   name: string;
   nameHi: string;
-  priceMonthly: number;           // INR before GST
-  priceYearly: number;            // INR before GST (17% discount ≈ 2 months free)
-  priceMonthlyPerUser: number;    // Extra user cost
+  priceMonthly: number;
+  priceYearly: number;
+  priceMonthlyPerUser: number;
   features: PlanFeatures;
   description: string;
   descriptionHi: string;
@@ -83,7 +90,7 @@ export const PLANS: Record<PlanId, {
     descriptionHi: "7 दिन मुफ्त ट्रायल। क्रेडिट कार्ड की जरूरत नहीं।",
     cta: "Start Free Trial",
     features: {
-      chatMessagesPerDay: 25,
+      chatMessagesPerDay: 10,          // ← Reduced from 25
       maxUsers: 1,
       storageGB: 1,
       maxIntegrations: 2,
@@ -110,12 +117,12 @@ export const PLANS: Record<PlanId, {
       whiteLabel: false,
       prioritySupport: false,
       dedicatedAccountManager: false,
-      shipmentsPerMonth: 50,
-      inventoryItems: 100,
-      vehicles: 5,
-      drivers: 5,
+      shipmentsPerMonth: 20,           // ← Reduced from 50
+      inventoryItems: 50,
+      vehicles: 3,
+      drivers: 3,
       warehouses: 1,
-      customers: 50,
+      customers: 25,
       aiChat: true,
       aiReports: false,
       voiceInput: false,
@@ -127,7 +134,7 @@ export const PLANS: Record<PlanId, {
     name: "Starter",
     nameHi: "शुरुआती",
     priceMonthly: 999,
-    priceYearly: 9999,    // ≈ ₹833/mo (2 months free)
+    priceYearly: 9999,
     priceMonthlyPerUser: 199,
     description: "Everything a growing logistics business needs to ship smarter.",
     descriptionHi: "बढ़ते लॉजिस्टिक्स व्यवसाय के लिए सब कुछ।",
@@ -179,16 +186,16 @@ export const PLANS: Record<PlanId, {
     name: "Growth",
     nameHi: "ग्रोथ",
     priceMonthly: 2999,
-    priceYearly: 29999,   // ≈ ₹2,500/mo
+    priceYearly: 29999,
     priceMonthlyPerUser: 299,
     description: "Scale operations with ERP, e-commerce, and compliance automation.",
     descriptionHi: "ERP, ई-कॉमर्स और कंप्लायंस ऑटोमेशन के साथ बढ़ें।",
     cta: "Start at ₹2,999/mo",
     features: {
-      chatMessagesPerDay: -1, // unlimited
+      chatMessagesPerDay: -1,
       maxUsers: 10,
       storageGB: 25,
-      maxIntegrations: -1, // unlimited
+      maxIntegrations: -1,
       shiprocket: true,
       whatsapp: true,
       tallyPrime: true,
@@ -229,7 +236,7 @@ export const PLANS: Record<PlanId, {
     name: "Enterprise",
     nameHi: "एंटरप्राइज़",
     priceMonthly: 7999,
-    priceYearly: 79999,   // ≈ ₹6,667/mo
+    priceYearly: 79999,
     priceMonthlyPerUser: 399,
     description: "Full platform with ERP, custom integrations, and white-label options.",
     descriptionHi: "ERP, कस्टम इंटीग्रेशन और व्हाइट-लेबल के साथ पूरा प्लेटफॉर्म।",
@@ -272,17 +279,17 @@ export const PLANS: Record<PlanId, {
       aiChat: true,
       aiReports: true,
       voiceInput: true,
-      dataRetentionDays: -1, // forever
+      dataRetentionDays: -1,
     },
   },
 };
 
-/** Get the current user's plan features */
+// ── Plan helpers ──
+
 export function getPlanFeatures(plan: PlanId): PlanFeatures {
   return PLANS[plan]?.features || PLANS.free.features;
 }
 
-/** Check if a feature is available on the given plan */
 export function hasFeature(plan: PlanId, feature: keyof PlanFeatures): boolean {
   const features = getPlanFeatures(plan);
   const val = features[feature];
@@ -291,54 +298,179 @@ export function hasFeature(plan: PlanId, feature: keyof PlanFeatures): boolean {
   return false;
 }
 
-/** Check if the user is within their usage limit */
-export function isWithinLimit(
-  plan: PlanId,
-  metric: keyof PlanFeatures,
-  currentUsage: number
-): boolean {
+export function isWithinLimit(plan: PlanId, metric: keyof PlanFeatures, currentUsage: number): boolean {
   const features = getPlanFeatures(plan);
   const limit = features[metric] as number;
-  if (limit === -1) return true; // unlimited
+  if (limit === -1) return true;
   return currentUsage < limit;
 }
 
-/** Infrastructure cost estimate per plan (monthly INR) — used for margin calculations */
-export const INFRA_COST_PER_USER_MONTHLY: Record<PlanId, number> = {
-  free: 5,       // Minimal — serverless cold starts, no DB writes
-  starter: 27,   // Neon ~0.5GB, Vercel ~20GB BW, AI ~50 calls
-  growth: 70,    // Neon ~2GB, Vercel ~50GB BW, AI ~200 calls, Sentry
-  enterprise: 262, // Neon ~5GB, Vercel ~100GB BW, AI ~500 calls, Sentry Pro
+export function getUpgradePlan(currentPlan: PlanId): PlanId | null {
+  if (currentPlan === "free") return "starter";
+  if (currentPlan === "starter") return "growth";
+  if (currentPlan === "growth") return "enterprise";
+  return null; // already on highest plan
+}
+
+// ── Cost Breakdown (Monthly INR per user) ──
+// Includes ALL infrastructure costs: compute, DB, bandwidth, AI, monitoring
+
+export interface CostBreakdown {
+  compute: number;      // Vercel serverless functions
+  database: number;     // Neon PostgreSQL
+  bandwidth: number;    // Vercel bandwidth + CDN
+  ai: number;           // Cloudflare Workers AI (Llama 3 8B)
+  email: number;        // Resend email delivery
+  monitoring: number;   // Sentry error tracking
+  total: number;
+}
+
+/** Cloudflare Workers AI pricing (Llama 3 8B):
+ *  Input tokens:  ~$0.011/M → ₹0.92/M tokens
+ *  Output tokens: ~$0.033/M → ₹2.75/M tokens
+ *  Avg conversation: ~2K input + ~1K output tokens ≈ ₹0.005 (~0.5 paisa)
+ *  Packets/shipments use 0 AI tokens — only MCP API calls
+ */
+
+const AI_COST_PER_CHAT = 0.005;  // ₹0.005 per AI chat conversation (~0.5 paisa)
+
+export const INFRA_COST: Record<PlanId, CostBreakdown> = {
+  free: {
+    compute: 2,
+    database: 1,
+    bandwidth: 0.5,
+    ai: 0.15,         // 10 chats/day × 30 days × ₹0.005 = ₹1.5 → ~₹0.15 amortized (not all days active)
+    email: 0,
+    monitoring: 0,
+    total: 3.65,
+  },
+  starter: {
+    compute: 8,
+    database: 5,
+    bandwidth: 2,
+    ai: 3,            // 200 chats/day × ~15 active days × ₹0.005 = ₹15 → ₹3 amortized
+    email: 2,
+    monitoring: 1,
+    total: 21,
+  },
+  growth: {
+    compute: 20,
+    database: 15,
+    bandwidth: 5,
+    ai: 15,           // unlimited but ~1000 chats/mo avg × ₹0.005 = ₹5 → ₹15 with growth
+    email: 5,
+    monitoring: 2,
+    total: 62,
+  },
+  enterprise: {
+    compute: 60,
+    database: 40,
+    bandwidth: 15,
+    ai: 80,           // ~5000 chats/mo × ₹0.005 = ₹25 → ₹80 with heavy usage
+    email: 15,
+    monitoring: 5,
+    total: 215,
+  },
 };
 
-/** Calculate gross margin percentage */
-export function calculateMargin(plan: PlanId, billing: "monthly" | "yearly" = "monthly"): number {
+/** Calculate gross margin percentage with full cost breakdown */
+export function calculateMargin(plan: PlanId, billing: "monthly" | "yearly" = "monthly"): {
+  revenue: number;
+  cost: number;
+  margin: number;
+  breakdown: CostBreakdown;
+} {
   const p = PLANS[plan];
   const revenue = billing === "monthly" ? p.priceMonthly : Math.round(p.priceYearly / 12);
-  const cost = INFRA_COST_PER_USER_MONTHLY[plan];
-  if (revenue === 0) return 0;
-  return Math.round(((revenue - cost) / revenue) * 100);
+  const breakdown = INFRA_COST[plan];
+  const cost = breakdown.total;
+  const margin = revenue === 0 ? 0 : Math.round(((revenue - cost) / revenue) * 100);
+  return { revenue, cost, margin, breakdown };
 }
 
-/** Bundle savings text */
-export function getYearlySavings(plan: PlanId): string {
-  const p = PLANS[plan];
-  if (p.priceMonthly === 0) return "";
-  const monthlyTotal = p.priceMonthly * 12;
-  const yearlyPrice = p.priceYearly;
-  const saved = monthlyTotal - yearlyPrice;
-  const months = Math.round(saved / p.priceMonthly);
-  return `Save ₹${saved.toLocaleString("en-IN")}/year (${months} months free)`;
+// ── Usage Tracking (DB-backed) ──
+
+const sql = neon(process.env.DATABASE_URL!);
+
+/** Get today's chat message count for a user */
+export async function getTodayChatCount(userId: string): Promise<number> {
+  try {
+    const [row] = await sql`
+      SELECT COUNT(*) as count FROM chat_messages
+      WHERE role = 'user'
+        AND thread_id IN (SELECT id FROM chat_threads WHERE user_id = ${userId})
+        AND created_at >= date_trunc('day', NOW())
+    `;
+    return Number(row?.count) || 0;
+  } catch {
+    return 0;
+  }
 }
 
-/** Format price in Indian number system */
+/** Get this month's shipment count for a user */
+export async function getThisMonthShipmentCount(userId: string): Promise<number> {
+  try {
+    const [row] = await sql`
+      SELECT COUNT(*) as count FROM shipments
+      WHERE created_at >= date_trunc('month', NOW())
+    `;
+    return Number(row?.count) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Get user's plan from DB */
+export async function getUserPlan(userId: string): Promise<PlanId> {
+  try {
+    const [row] = await sql`SELECT plan FROM users WHERE id = ${userId}`;
+    const plan = (row?.plan as string) || "free";
+    if (plan in PLANS) return plan as PlanId;
+    return "free";
+  } catch {
+    return "free";
+  }
+}
+
+/** Get full usage stats for a user */
+export async function getUserUsage(userId: string): Promise<Record<string, number>> {
+  const [chatToday, shipmentsMonth, inventory, vehicles, drivers, customers, warehouses] = await Promise.all([
+    getTodayChatCount(userId),
+    getThisMonthShipmentCount(userId),
+    sql`SELECT COUNT(*) as c FROM inventory WHERE user_id = ${userId}`.then(r => Number(r[0]?.c) || 0),
+    sql`SELECT COUNT(*) as c FROM fleet_vehicles WHERE user_id = ${userId}`.then(r => Number(r[0]?.c) || 0),
+    sql`SELECT COUNT(*) as c FROM fleet_drivers WHERE user_id = ${userId}`.then(r => Number(r[0]?.c) || 0),
+    sql`SELECT COUNT(*) as c FROM customers`.then(r => Number(r[0]?.c) || 0),
+    sql`SELECT COUNT(*) as c FROM warehouse WHERE user_id = ${userId}`.then(r => Number(r[0]?.c) || 0),
+  ]);
+
+  return {
+    chatMessagesPerDay: chatToday,
+    shipmentsPerMonth: shipmentsMonth,
+    inventoryItems: inventory,
+    vehicles,
+    drivers,
+    customers,
+    warehouses,
+  };
+}
+
+// ── UI Formatting ──
+
 export function formatPrice(amount: number): string {
   if (amount === 0) return "Free";
   return `₹${amount.toLocaleString("en-IN")}`;
 }
 
-/** Price per day (useful for micro-comparisons) */
 export function pricePerDay(monthly: number): string {
   if (monthly === 0) return "₹0/day";
   return `~₹${Math.round(monthly / 30)}/day`;
+}
+
+export function getYearlySavings(planId: PlanId): string {
+  const p = PLANS[planId];
+  if (p.priceMonthly === 0) return "";
+  const saved = p.priceMonthly * 12 - p.priceYearly;
+  const months = Math.round(saved / p.priceMonthly);
+  return `Save ₹${saved.toLocaleString("en-IN")}/year (${months} months free)`;
 }

@@ -1,46 +1,63 @@
-import { NextRequest, NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
+/**
+ * GET /api/usage — Returns current usage stats for the authenticated user.
+ * Used by the UpgradeBanner component to show progress bars.
+ */
+
+import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
+import { getUserPlan, getUserUsage, getPlanFeatures, PLANS } from "@/lib/pricing";
 
-export const GET = withAuth(async (request) => {
+export const GET = withAuth(async (_request, user) => {
   try {
-    const { searchParams } = new URL(request.url);
-    const orgId = searchParams.get("orgId") || "default";
-    const sql = neon(process.env.DATABASE_URL!);
+    const plan = await getUserPlan(user.id);
+    const features = getPlanFeatures(plan);
+    const usage = await getUserUsage(user.id);
 
-    const tasksResult = await sql`SELECT COUNT(*)::int as count FROM agent_tasks`;
-    const [tasks]: any[] = tasksResult;
-    const actionsResult = await sql`SELECT COUNT(*)::int as count FROM approval_actions`;
-    const [actions]: any[] = actionsResult;
-    const events = await sql`SELECT * FROM usage_events ORDER BY created_at DESC LIMIT 20`;
+    const limitEntry = (key: string, current: number, max: number, label: string) => ({
+      current,
+      max,
+      percent: max === -1 ? 0 : Math.min(100, Math.round((current / max) * 100)),
+      label,
+    });
 
     return NextResponse.json({
-      stats: {
-        totalTasks: tasks?.count || 0,
-        pendingApprovals: actions?.count || 0,
+      plan,
+      planName: PLANS[plan].name,
+      limits: {
+        chatMessagesPerDay: limitEntry(
+          "chatMessagesPerDay",
+          usage.chatMessagesPerDay || 0,
+          features.chatMessagesPerDay,
+          "AI Chats Today"
+        ),
+        shipmentsPerMonth: limitEntry(
+          "shipmentsPerMonth",
+          usage.shipmentsPerMonth || 0,
+          features.shipmentsPerMonth,
+          "Shipments This Month"
+        ),
+        inventoryItems: limitEntry(
+          "inventoryItems",
+          usage.inventoryItems || 0,
+          features.inventoryItems,
+          "Inventory Items"
+        ),
+        vehicles: limitEntry(
+          "vehicles",
+          usage.vehicles || 0,
+          features.vehicles,
+          "Vehicles"
+        ),
+        drivers: limitEntry(
+          "drivers",
+          usage.drivers || 0,
+          features.drivers,
+          "Drivers"
+        ),
       },
-      recentUsage: events,
     });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
-});
-
-export const POST = withAuth(async (request) => {
-  try {
-    const body = await request.json();
-    const { orgId, eventType, category, value, metadata } = body;
-    if (!orgId || !eventType) {
-      return NextResponse.json({ error: "orgId and eventType required" }, { status: 400 });
-    }
-    const sql = neon(process.env.DATABASE_URL!);
-    const id = crypto.randomUUID();
-    await sql`
-      INSERT INTO usage_events (id, org_id, event_type, category, value, metadata)
-      VALUES (${id}, ${orgId}, ${eventType}, ${category || null}, ${value || 1}, ${JSON.stringify(metadata || {})})
-    `;
-    return NextResponse.json({ success: true, id }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 });

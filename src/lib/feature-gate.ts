@@ -1,64 +1,65 @@
 /**
- * Feature Gate — middleware helper for plan-based access control.
+ * Feature Gate — plan-based access control with enforcement.
  *
  * Usage in API routes:
- *   import { requireFeature, requireWithinLimit } from "@/lib/feature-gate";
- *   const gate = await requireFeature(user.id, "routeOptimization");
+ *   import { requireFeature, requireChatLimit, requireShipmentLimit } from "@/lib/feature-gate";
+ *   const gate = await requireChatLimit(user.id);
  *   if (gate.denied) return gate.response;
  *
- * Requires user to have a `plan` column in the users table or falls back to "free".
+ * Returns structured upgrade payloads the frontend can render into banners/modals.
  */
 
-import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
 import {
   PlanId,
   hasFeature,
   isWithinLimit,
   getPlanFeatures,
+  getUpgradePlan,
+  getUserPlan,
+  getUserUsage,
   PLANS,
 } from "@/lib/pricing";
 import type { PlanFeatures } from "@/lib/pricing";
 
-const sql = neon(process.env.DATABASE_URL!);
-
-async function getUserPlan(userId: string): Promise<PlanId> {
-  try {
-    const [row] = await sql`SELECT plan FROM users WHERE id = ${userId}`;
-    const plan = (row?.plan as string) || "free";
-    if (plan in PLANS) return plan as PlanId;
-    return "free";
-  } catch {
-    return "free";
+/** Common upgrade response shape the frontend can always render */
+function upgradeResponse(
+  plan: PlanId,
+  opts: {
+    limitType: string;
+    message: string;
+    currentUsage: number;
+    limit: number;
+    feature?: string;
   }
-}
+): NextResponse {
+  const upgradePlan = getUpgradePlan(plan);
+  const upgradeInfo = upgradePlan ? PLANS[upgradePlan] : null;
 
-async function getUserUsage(userId: string): Promise<Record<string, number>> {
-  try {
-    const [shipments] = await sql`SELECT COUNT(*) as count FROM shipments WHERE created_at >= date_trunc('month', NOW())`;
-    const [inventory] = await sql`SELECT COUNT(*) as count FROM inventory WHERE user_id = ${userId}`;
-    const [vehicles] = await sql`SELECT COUNT(*) as count FROM fleet_vehicles WHERE user_id = ${userId}`;
-    const [drivers] = await sql`SELECT COUNT(*) as count FROM fleet_drivers WHERE user_id = ${userId}`;
-    const [customers] = await sql`SELECT COUNT(*) as count FROM customers`;
-    const [warehouses] = await sql`SELECT COUNT(*) as count FROM warehouse WHERE user_id = ${userId}`;
-
-    return {
-      shipmentsPerMonth: Number(shipments?.count) || 0,
-      inventoryItems: Number(inventory?.count) || 0,
-      vehicles: Number(vehicles?.count) || 0,
-      drivers: Number(drivers?.count) || 0,
-      customers: Number(customers?.count) || 0,
-      warehouses: Number(warehouses?.count) || 0,
-    };
-  } catch {
-    return {};
-  }
+  return NextResponse.json(
+    {
+      error: opts.message,
+      limitType: opts.limitType,
+      currentPlan: PLANS[plan].name,
+      currentPlanId: plan,
+      currentUsage: opts.currentUsage,
+      limit: opts.limit,
+      upgradeTo: upgradePlan,
+      upgradeName: upgradeInfo?.name || null,
+      upgradePrice: upgradeInfo?.priceMonthly || 0,
+      upgradeUrl: "/pricing",
+      blocked: true,
+      feature: opts.feature,
+    },
+    { status: 403 }
+  );
 }
 
 export type GateResult = {
   denied: false;
   plan: PlanId;
   features: PlanFeatures;
+  usage: Record<string, number>;
 } | {
   denied: true;
   plan: PlanId;
@@ -72,26 +73,23 @@ export async function requireFeature(
 ): Promise<GateResult> {
   const plan = await getUserPlan(userId);
   const features = getPlanFeatures(plan);
+  const usage = await getUserUsage(userId);
 
   if (!hasFeature(plan, feature)) {
-    const planName = PLANS[plan].name;
     return {
       denied: true,
       plan,
-      response: NextResponse.json(
-        {
-          error: `This feature requires a higher plan.`,
-          feature,
-          currentPlan: planName,
-          upgradeTo: plan === "free" ? "starter" : plan === "starter" ? "growth" : "enterprise",
-          upgradeUrl: "/settings/billing",
-        },
-        { status: 403 }
-      ),
+      response: upgradeResponse(plan, {
+        limitType: "feature",
+        message: `"${feature}" requires the ${getUpgradePlan(plan) ? PLANS[getUpgradePlan(plan)!].name : "higher"} plan.`,
+        currentUsage: 0,
+        limit: 0,
+        feature,
+      }),
     };
   }
 
-  return { denied: false, plan, features };
+  return { denied: false, plan, features, usage };
 }
 
 /** Check if the user is within their plan's usage limit for a metric */
@@ -106,23 +104,120 @@ export async function requireWithinLimit(
 
   if (!isWithinLimit(plan, metric, currentUsage)) {
     const limit = features[metric as keyof PlanFeatures] as number;
-    const planName = PLANS[plan].name;
+    const readableName = metric
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, s => s.toUpperCase())
+      .replace("Per Day", "per day")
+      .replace("Per Month", "per month");
+
     return {
       denied: true,
       plan,
-      response: NextResponse.json(
-        {
-          error: `You've reached your ${planName} plan limit for this feature.`,
-          metric,
-          currentUsage,
-          limit,
-          upgradeTo: plan === "free" ? "starter" : plan === "starter" ? "growth" : "enterprise",
-          upgradeUrl: "/settings/billing",
-        },
-        { status: 429 }
-      ),
+      response: upgradeResponse(plan, {
+        limitType: "usage",
+        message: `You've used all your ${readableName} on the ${PLANS[plan].name} plan. Upgrade to continue.`,
+        currentUsage,
+        limit,
+        feature: metric,
+      }),
     };
   }
 
-  return { denied: false, plan, features };
+  return { denied: false, plan, features, usage };
+}
+
+/** Specifically enforce daily chat message limit — BLOCKS when exceeded */
+export async function requireChatLimit(userId: string): Promise<GateResult> {
+  const plan = await getUserPlan(userId);
+  const features = getPlanFeatures(plan);
+  const usage = await getUserUsage(userId);
+  const todayCount = usage.chatMessagesPerDay || 0;
+
+  // Unlimited plans skip check
+  if (features.chatMessagesPerDay === -1) {
+    return { denied: false, plan, features, usage };
+  }
+
+  if (todayCount >= features.chatMessagesPerDay) {
+    return {
+      denied: true,
+      plan,
+      response: upgradeResponse(plan, {
+        limitType: "chat_messages",
+        message: `You've used all ${features.chatMessagesPerDay} AI chats for today on the ${PLANS[plan].name} plan. ${getUpgradePlan(plan) ? `Upgrade to ${PLANS[getUpgradePlan(plan)!].name} for ${PLANS[getUpgradePlan(plan)!].features.chatMessagesPerDay === -1 ? "unlimited" : PLANS[getUpgradePlan(plan)!].features.chatMessagesPerDay + " chats/day"}.` : "Contact us for higher limits."}`,
+        currentUsage: todayCount,
+        limit: features.chatMessagesPerDay,
+        feature: "chatMessagesPerDay",
+      }),
+    };
+  }
+
+  return { denied: false, plan, features, usage };
+}
+
+/** Specifically enforce monthly shipment limit — BLOCKS when exceeded */
+export async function requireShipmentLimit(userId: string): Promise<GateResult> {
+  const plan = await getUserPlan(userId);
+  const features = getPlanFeatures(plan);
+  const usage = await getUserUsage(userId);
+  const monthCount = usage.shipmentsPerMonth || 0;
+
+  // Unlimited plans skip check
+  if (features.shipmentsPerMonth === -1) {
+    return { denied: false, plan, features, usage };
+  }
+
+  if (monthCount >= features.shipmentsPerMonth) {
+    return {
+      denied: true,
+      plan,
+      response: upgradeResponse(plan, {
+        limitType: "shipments",
+        message: `You've created ${monthCount} shipments this month — your ${PLANS[plan].name} plan allows ${features.shipmentsPerMonth}. ${getUpgradePlan(plan) ? `Upgrade to ${PLANS[getUpgradePlan(plan)!].name} for ${PLANS[getUpgradePlan(plan)!].features.shipmentsPerMonth === -1 ? "unlimited" : PLANS[getUpgradePlan(plan)!].features.shipmentsPerMonth.toLocaleString("en-IN") + " shipments/month"}.` : "Contact us for higher limits."}`,
+        currentUsage: monthCount,
+        limit: features.shipmentsPerMonth,
+        feature: "shipmentsPerMonth",
+      }),
+    };
+  }
+
+  return { denied: false, plan, features, usage };
+}
+
+/**
+ * Get usage summary for the frontend (for displaying progress bars / warnings).
+ * This is a lightweight read-only check — no blocking.
+ */
+export async function getUsageSummary(userId: string): Promise<{
+  plan: PlanId;
+  planName: string;
+  limits: Record<string, { current: number; max: number; percent: number; label: string }>;
+}> {
+  const plan = await getUserPlan(userId);
+  const features = getPlanFeatures(plan);
+  const usage = await getUserUsage(userId);
+
+  const limitEntry = (key: string, current: number, max: number, label: string) => {
+    const pct = max === -1 ? 0 : Math.min(100, Math.round((current / max) * 100));
+    return { current, max, percent: pct, label };
+  };
+
+  return {
+    plan,
+    planName: PLANS[plan].name,
+    limits: {
+      chatMessagesPerDay: limitEntry(
+        "chatMessagesPerDay",
+        usage.chatMessagesPerDay || 0,
+        features.chatMessagesPerDay,
+        "AI Chats Today"
+      ),
+      shipmentsPerMonth: limitEntry(
+        "shipmentsPerMonth",
+        usage.shipmentsPerMonth || 0,
+        features.shipmentsPerMonth,
+        "Shipments This Month"
+      ),
+    },
+  };
 }

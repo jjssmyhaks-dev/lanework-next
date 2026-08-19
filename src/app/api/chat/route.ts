@@ -10,6 +10,7 @@ import { neon } from "@neondatabase/serverless";
 import { withAuth } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { orchestrate } from "@/lib/chat/orchestrator";
+import { requireChatLimit } from "@/lib/feature-gate";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -75,6 +76,10 @@ export const POST = withAuth(async (request, user) => {
     }
 
     const userId = user.id;
+
+    // ── Enforce daily chat limit (hard block) ──
+    const chatGate = await requireChatLimit(userId);
+    if (chatGate.denied) return chatGate.response;
 
     // ── Get or create thread ──
     let activeThreadId = threadId;

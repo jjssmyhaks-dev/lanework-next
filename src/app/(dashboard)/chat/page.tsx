@@ -12,6 +12,7 @@ import MessageBubble from "@/components/ui/chat/message-bubble";
 import QuickActionsBar from "@/components/ui/chat/quick-actions-bar";
 import IntegrationPills from "@/components/ui/chat/integration-pills";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { UpgradeBanner, UsageProgressBar } from "@/components/ui/upgrade-banner";
 
 // ── Types ──
 
@@ -239,6 +240,11 @@ export default function ChatPage() {
   const [connection, setConnection] = useState<ConnectionState>({
     integration: null, step: 0, configValues: {}, connecting: false, result: null,
   });
+  const [usageStats, setUsageStats] = useState<{
+    plan: string; planName: string;
+    limits: Record<string, { current: number; max: number; percent: number; label: string }>;
+  } | null>(null);
+  const [limitError, setLimitError] = useState<{ blocked: boolean; message: string; upgradeName?: string; upgradePrice?: number } | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -251,6 +257,15 @@ export default function ChatPage() {
       setThreadsLoading(false);
     });
   }, []);
+
+  // ── Fetch usage stats on mount + after each message
+  const fetchUsage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/usage");
+      if (res.ok) setUsageStats(await res.json());
+    } catch { /* silent */ }
+  }, []);
+  useEffect(() => { fetchUsage(); }, [fetchUsage]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
   useEffect(() => { if (messages.length > 1) saveHistory(messages); }, [messages]);
@@ -300,8 +315,16 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg, threadId: activeThreadId }),
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.blocked || data.limitType) {
+          setLimitError({ blocked: true, message: data.error, upgradeName: data.upgradeName, upgradePrice: data.upgradePrice });
+          return null;
+        }
+        return null;
+      }
       const data = await res.json();
+      setLimitError(null); // clear any previous limit error on success
       if (data.threadId && data.threadId !== activeThreadId) setActiveThreadId(data.threadId);
       return data.message ? { reply: data.message.content, toolCalls: data.message.toolCalls || [] } : null;
     } catch { return null; }
@@ -347,6 +370,9 @@ export default function ChatPage() {
     const msg = (text || input).trim();
     if (!msg || loading) return;
 
+    // Client-side check: if we know the limit is hit, block immediately
+    if (limitError?.blocked) return;
+
     const userMsg: Message = { id: genId(), role: "user", content: msg, timestamp: new Date().toISOString(), toolResult: null };
     addMessage(userMsg);
     setInput("");
@@ -373,8 +399,11 @@ export default function ChatPage() {
       }
     } catch {
       addMessage({ id: genId(), role: "assistant", content: "Something went wrong. Please try again.", timestamp: new Date().toISOString(), toolResult: { type: "error", data: { message: "An unexpected error occurred." } } });
-    } finally { setLoading(false); }
-  }, [input, loading, addMessage, activeThreadId]);
+    } finally {
+      setLoading(false);
+      fetchUsage(); // refresh usage stats after each message
+    }
+  }, [input, loading, addMessage, activeThreadId, limitError, fetchUsage]);
 
   // ── Connection Wizard ──
   const startConnection = (integration: IntegrationSetup) => {
@@ -622,6 +651,26 @@ export default function ChatPage() {
           )}
         </div>
 
+        {/* Upgrade Banner — shown when limit is hit */}
+        {limitError?.blocked && (
+          <div className="px-4 py-3 bg-white border-t border-gray-200">
+            <UpgradeBanner
+              limitType="chat_messages"
+              message={limitError.message}
+              currentUsage={usageStats?.limits?.chatMessagesPerDay?.current || 0}
+              limit={usageStats?.limits?.chatMessagesPerDay?.max || 10}
+              currentPlan={usageStats?.planName || "Free Trial"}
+              upgradeName={limitError.upgradeName}
+              upgradePrice={limitError.upgradePrice}
+              upgradeUrl="/pricing"
+              feature="chatMessagesPerDay"
+              blocked={true}
+              compact={false}
+              onRetry={() => { setLimitError(null); fetchUsage(); }}
+            />
+          </div>
+        )}
+
         {/* Input Area */}
         <div className="border-t border-gray-200 bg-white flex-shrink-0">
           <div className="max-w-2xl mx-auto px-4 py-3 space-y-2">
@@ -629,6 +678,15 @@ export default function ChatPage() {
             <IntegrationPills onSelect={handleIntegrationSelect} onConnect={handleIntegrationConnect} />
             {/* Quick Actions */}
             <QuickActionsBar onAction={(template) => { setInput(template); inputRef.current?.focus(); }} />
+            {/* Usage Progress Bar */}
+            {usageStats && usageStats.limits.chatMessagesPerDay.max !== -1 && (
+              <UsageProgressBar
+                current={usageStats.limits.chatMessagesPerDay.current}
+                max={usageStats.limits.chatMessagesPerDay.max}
+                label="chats today"
+                plan={usageStats.planName}
+              />
+            )}
             {/* Text Input + File Upload */}
             <div className="flex items-end gap-2">
               <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" />
@@ -650,11 +708,12 @@ export default function ChatPage() {
                   {charCount}/{MAX_CHARS}
                 </span>
               </div>
-              <button onClick={() => send()} disabled={loading || !input.trim()}
+              <button onClick={() => send()} disabled={loading || !input.trim() || !!limitError?.blocked}
                 className={cn("grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white transition-colors",
-                  loading || !input.trim() ? "bg-gray-300 cursor-not-allowed" : "bg-[#1a1a2e] hover:bg-[#1a1a2e]/90"
+                  loading || !input.trim() || limitError?.blocked ? "bg-gray-300 cursor-not-allowed" : "bg-[#1a1a2e] hover:bg-[#1a1a2e]/90"
                 )}
                 aria-label="Send message"
+                title={limitError?.blocked ? "Daily chat limit reached — upgrade to continue" : "Send message"}
               >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
               </button>

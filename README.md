@@ -355,9 +355,9 @@ All prices in ₹ INR + applicable GST (18%). Designed for Indian MSMEs — no U
 
 | Feature | Free | Starter | Growth | Enterprise |
 |---------|------|---------|--------|------------|
-| AI Chat | 25/day | 200/day | Unlimited | Unlimited |
+| AI Chat | 10/day | 200/day | Unlimited | Unlimited |
 | Team members | 1 | 3 | 10 | 50 |
-| Shipments/month | 50 | 500 | 5,000 | Unlimited |
+| Shipments/month | 20 | 500 | 5,000 | Unlimited |
 | Integrations | 2 | 5 | Unlimited | Unlimited |
 | Shiprocket | ✅ | ✅ | ✅ | ✅ |
 | WhatsApp | ❌ | ✅ | ✅ | ✅ |
@@ -376,14 +376,14 @@ All prices in ₹ INR + applicable GST (18%). Designed for Indian MSMEs — no U
 
 ### Infrastructure Cost (per user/month)
 
-| Plan | Revenue | Infra Cost | Gross Margin |
-|------|---------|-----------|-------------|
-| Starter | ₹999 | ₹27 | **97%** |
-| Growth | ₹2,999 | ₹70 | **98%** |
-| Enterprise | ₹7,999 | ₹262 | **97%** |
+| Plan | Revenue | Cost (incl. AI) | Gross Margin |
+|------|---------|----------------|-------------|
+| Starter | ₹999 | ₹21 | **97.9%** |
+| Growth | ₹2,999 | ₹62 | **97.9%** |
+| Enterprise | ₹7,999 | ₹215 | **97.3%** |
 
-→ All plans exceed the 75% gross margin target.
-→ See [Pricing](docs/PRICING.md) for full breakdown.
+→ All plans exceed the 75% gross margin target (AI costs included).
+→ AI cost: ~₹0.005/conversation (Llama 3 8B via Cloudflare Workers AI).
 
 ---
 

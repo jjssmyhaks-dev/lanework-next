@@ -5,6 +5,7 @@ import { createShipmentSchema, validateBody } from "@/lib/validations";
 import { parsePagination, paginate } from "@/lib/pagination";
 import { auditLog, extractRequestMeta } from "@/lib/audit";
 import { logger } from "@/lib/logger";
+import { requireShipmentLimit } from "@/lib/feature-gate";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -46,6 +47,10 @@ export const GET = withAuth(async (request) => {
 
 export const POST = withAuth(async (request, user) => {
   try {
+    // ── Enforce monthly shipment limit (hard block) ──
+    const shipmentGate = await requireShipmentLimit(user.id);
+    if (shipmentGate.denied) return shipmentGate.response;
+
     const validation = await validateBody(request, createShipmentSchema);
     if (!validation.success) return validation.error;
     const {

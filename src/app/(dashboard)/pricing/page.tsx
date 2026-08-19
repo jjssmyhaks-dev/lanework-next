@@ -254,10 +254,91 @@ export default function PricingPage() {
         </div>
       </div>
 
-      {/* Cost breakdown */}
-      <div className="mx-auto max-w-4xl px-6 pb-16">
+      {/* Cost breakdown + margin analysis */}
+      <div className="mx-auto max-w-5xl px-6 pb-16">
         <div className="rounded-2xl border border-[#e5e7eb] bg-white p-8">
-          <h2 className="text-xl font-bold text-[#1a1a2e] mb-4">What you&apos;re paying for</h2>
+          <h2 className="text-xl font-bold text-[#1a1a2e] mb-2">What you&apos;re paying for</h2>
+          <p className="text-sm text-[#1a1a2e]/50 mb-6">Full cost breakdown per plan — AI included. All margins above 75%.</p>
+
+          {/* Cost table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm mb-6">
+              <thead>
+                <tr className="border-b border-[#e5e7eb]">
+                  <th className="text-left py-2 text-[#1a1a2e]/60 font-medium">Cost Component</th>
+                  <th className="text-right py-2 text-[#1a1a2e]/60 font-medium">Starter</th>
+                  <th className="text-right py-2 text-[#1a1a2e]/60 font-medium">Growth</th>
+                  <th className="text-right py-2 text-[#1a1a2e]/60 font-medium">Enterprise</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#1a1a2e]">
+                <tr className="border-b border-[#e5e7eb]/50">
+                  <td className="py-2">Compute (Vercel serverless)</td>
+                  <td className="text-right py-2">₹8</td>
+                  <td className="text-right py-2">₹20</td>
+                  <td className="text-right py-2">₹60</td>
+                </tr>
+                <tr className="border-b border-[#e5e7eb]/50">
+                  <td className="py-2">Database (Neon PostgreSQL)</td>
+                  <td className="text-right py-2">₹5</td>
+                  <td className="text-right py-2">₹15</td>
+                  <td className="text-right py-2">₹40</td>
+                </tr>
+                <tr className="border-b border-[#e5e7eb]/50">
+                  <td className="py-2">Bandwidth (Vercel CDN)</td>
+                  <td className="text-right py-2">₹2</td>
+                  <td className="text-right py-2">₹5</td>
+                  <td className="text-right py-2">₹15</td>
+                </tr>
+                <tr className="border-b border-[#e5e7eb]/50 bg-emerald-50/50">
+                  <td className="py-2 font-medium">🤖 AI (Cloudflare Workers AI — Llama 3 8B)</td>
+                  <td className="text-right py-2 font-medium">₹3</td>
+                  <td className="text-right py-2 font-medium">₹15</td>
+                  <td className="text-right py-2 font-medium">₹80</td>
+                </tr>
+                <tr className="border-b border-[#e5e7eb]/50">
+                  <td className="py-2">Email (Resend)</td>
+                  <td className="text-right py-2">₹2</td>
+                  <td className="text-right py-2">₹5</td>
+                  <td className="text-right py-2">₹15</td>
+                </tr>
+                <tr className="border-b border-[#e5e7eb]/50">
+                  <td className="py-2">Monitoring (Sentry)</td>
+                  <td className="text-right py-2">₹1</td>
+                  <td className="text-right py-2">₹2</td>
+                  <td className="text-right py-2">₹5</td>
+                </tr>
+                <tr className="border-t-2 border-[#1a1a2e]/20">
+                  <td className="py-3 font-semibold text-[#1a1a2e]">Total cost per user/month</td>
+                  <td className="text-right py-3 font-bold text-red-600">₹21</td>
+                  <td className="text-right py-3 font-bold text-red-600">₹62</td>
+                  <td className="text-right py-3 font-bold text-red-600">₹215</td>
+                </tr>
+                <tr>
+                  <td className="py-2 font-semibold">Revenue per user/month</td>
+                  <td className="text-right py-2 font-semibold text-emerald-600">₹999</td>
+                  <td className="text-right py-2 font-semibold text-emerald-600">₹2,999</td>
+                  <td className="text-right py-2 font-semibold text-emerald-600">₹7,999</td>
+                </tr>
+                <tr className="bg-emerald-50">
+                  <td className="py-3 font-bold text-emerald-700">Gross Margin</td>
+                  <td className="text-right py-3 font-bold text-emerald-700">97.9%</td>
+                  <td className="text-right py-3 font-bold text-emerald-700">97.9%</td>
+                  <td className="text-right py-3 font-bold text-emerald-700">97.3%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* AI cost explanation */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 mb-6">
+            <h4 className="text-sm font-semibold text-blue-900 mb-2">🤖 How AI costs work</h4>
+            <p className="text-xs text-blue-700 leading-relaxed">
+              Every AI chat uses Cloudflare Workers AI (Llama 3 8B). Each conversation costs ~₹0.005 (half a paisa) — input tokens are ~₹0.92/million, output ~₹2.75/million. A typical logistics query uses ~3K tokens total. <strong>AI is included in all plans — no per-message charges.</strong>
+            </p>
+          </div>
+
+          {/* What you get */}
           <div className="grid md:grid-cols-3 gap-6 text-sm">
             <div>
               <h3 className="font-semibold text-[#1a1a2e] mb-2 flex items-center gap-2">
