@@ -18,13 +18,29 @@ export interface DetectedIntent {
 export function detectIntent(text: string): DetectedIntent | null {
   const t = text.toLowerCase();
 
-  // Track shipment
+  // Fleet tracking — check BEFORE generic track to avoid "track all vehicles" matching as shipment
+  if (t.includes("fleet") || t.includes("track all vehicle") || (t.includes("vehicle") && !t.includes("shipment"))) {
+    return { action: "track_all", integration: "loconav", params: {} };
+  }
+
+  // Track shipment — check for # prefix first (preserves dashes in AWB)
+  const hashMatch = text.match(/#\s*([\w][\w-]*)/);
+  const isTrackingContext = /\b(track|shipment|where|status)\b/i.test(t);
+  if (hashMatch && isTrackingContext) {
+    const awb = hashMatch[1];
+    return {
+      action: "track_shipment",
+      integration: "shiprocket",
+      params: { tracking_number: awb, awb },
+    };
+  }
+  // Fallback: token-based extraction (strips special chars including dashes)
   const trackMatch =
-    t.match(/track\s+(?:shipment\s+)?([\w-]+)/i) ||
-    t.match(/where\s+(?:is|are)\s+(?:my\s+)?(?:shipment\s+)?([\w-]+)/i) ||
-    t.match(/status\s+(?:of\s+)?(?:shipment\s+)?([\w-]+)/i);
+    text.match(/track\s+(?:shipment\s+)?([\w-]+)/i) ||
+    text.match(/where\s+(?:is|are)\s+(?:my\s+)?(?:shipment\s+)?([\w-]+)/i) ||
+    text.match(/status\s+(?:of\s+)?(?:shipment\s+)?([\w-]+)/i);
   if (trackMatch) {
-    const trackingNumber = trackMatch[1].replace(/[#?!.,;:\s]/g, "");
+    const trackingNumber = trackMatch[1].replace(/[#?!.,;:\s-]/g, "");
     return {
       action: "track_shipment",
       integration: "shiprocket",
@@ -65,18 +81,16 @@ export function detectIntent(text: string): DetectedIntent | null {
     return { action: "reconcile", integration: "razorpay", params: {} };
   }
   if (t.includes("gstin") || t.includes("validate gst") || t.includes("gst validation")) {
-    const gstinMatch = t.match(/\b\d{2}[A-Z]{5}\d{4}[A-Z]\d[Z]\d[A-Z0-9]\b/i);
+    // GSTIN is 15 chars: 2 digits (state) + 5 alpha (PAN) + 4 digits + 1 alpha + 1 digit + Z + 1 check digit
+    const gstinMatch = text.match(/\b(\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z0-9])\b/i);
     return {
       action: "validate_gstin",
       integration: "gstn_eway_bill",
-      params: gstinMatch ? { gstin: gstinMatch[0].toUpperCase() } : {},
+      params: gstinMatch ? { gstin: gstinMatch[1].toUpperCase() } : {},
     };
   }
   if (t.includes("shopify") || t.includes("sync orders") || t.includes("ecommerce") || t.includes("e-commerce")) {
     return { action: "sync_orders", integration: "shopify", params: {} };
-  }
-  if (t.includes("fleet") || t.includes("vehicle") || t.includes("track vehicle")) {
-    return { action: "track_all", integration: "loconav", params: {} };
   }
   if (t.includes("export") && (t.includes("csv") || t.includes("shipments") || t.includes("inventory"))) {
     return { action: "export_csv", params: {} };

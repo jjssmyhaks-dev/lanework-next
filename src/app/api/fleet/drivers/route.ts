@@ -21,17 +21,18 @@ export const GET = withAuth(async (request) => {
   }
 });
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     const validation = await validateBody(request, createDriverSchema);
     if (!validation.success) return validation.error;
     const { name, license, status, hoursDriven, maxHours, assignedVehicle } = validation.data;
 
     const id = crypto.randomUUID();
+    const userId = user.id;
 
     await sql`
       INSERT INTO fleet_drivers (id, user_id, name, license, status, hours_driven, max_hours, assigned_vehicle)
-      VALUES (${id}, ${user_id}, ${name}, ${license}, ${status || "active"}, ${hoursDriven ?? 0}, ${maxHours ?? 8}, ${assignedVehicle || null})
+      VALUES (${id}, ${userId}, ${name}, ${license}, ${status || "active"}, ${hoursDriven ?? 0}, ${maxHours ?? 8}, ${assignedVehicle || null})
     `;
 
     const [driver] = await sql`

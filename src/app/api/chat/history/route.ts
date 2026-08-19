@@ -28,7 +28,7 @@ const chatMessageSchema = z.object({
     timestamp: z.string().optional(),
     toolResult: z.object({
       type: z.string(),
-      data: z.record(z.unknown()),
+      data: z.record(z.string(), z.unknown()),
     }).nullable().optional(),
   })).max(50),
 });
@@ -37,7 +37,7 @@ const chatMessageSchema = z.object({
  * GET /api/chat/history
  * Fetch the last N chat messages for the authenticated user.
  */
-export const GET = withAuth(async (request) => {
+export const GET = withAuth(async (request, user) => {
   try {
     await ensureTable();
     const { searchParams } = new URL(request.url);
@@ -46,7 +46,7 @@ export const GET = withAuth(async (request) => {
     const rows = await sql`
       SELECT id, role, content, tool_result, created_at
       FROM chat_messages
-      WHERE user_id = ${request.user.id}
+      WHERE user_id = ${user.id}
       ORDER BY created_at DESC
       LIMIT ${limit}
     `;
@@ -71,14 +71,14 @@ export const GET = withAuth(async (request) => {
  * Save chat messages for the authenticated user.
  * Replaces all existing messages for this user (full sync).
  */
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     await ensureTable();
     const validation = await validateBody(request, chatMessageSchema);
     if (!validation.success) return validation.error;
     const { messages } = validation.data;
 
-    const userId = request.user.id;
+    const userId = user.id;
 
     // Delete old messages for this user, then insert new ones
     await sql`DELETE FROM chat_messages WHERE user_id = ${userId}`;
@@ -92,7 +92,7 @@ export const POST = withAuth(async (request) => {
           ${msg.role},
           ${msg.content},
           ${msg.toolResult ? JSON.stringify(msg.toolResult) : null}::jsonb,
-          ${msg.timestamp ? new Date(msg.timestamp) : NOW()}
+          ${msg.timestamp ? new Date(msg.timestamp) : new Date()}
         )
       `;
     }
@@ -108,10 +108,10 @@ export const POST = withAuth(async (request) => {
  * DELETE /api/chat/history
  * Clear chat history for the authenticated user.
  */
-export const DELETE = withAuth(async (request) => {
+export const DELETE = withAuth(async (request, user) => {
   try {
     await ensureTable();
-    await sql`DELETE FROM chat_messages WHERE user_id = ${request.user.id}`;
+    await sql`DELETE FROM chat_messages WHERE user_id = ${user.id}`;
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";

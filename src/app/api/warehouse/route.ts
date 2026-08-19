@@ -21,13 +21,14 @@ export const GET = withAuth(async (request) => {
   }
 });
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     const validation = await validateBody(request, createWarehouseSchema);
     if (!validation.success) return validation.error;
     const { type, priority, assignedTo, dock, metadata } = validation.data;
 
     const id = crypto.randomUUID();
+    const user_id = user.id;
 
     const metadataJson = metadata ? JSON.stringify(metadata) : null;
 

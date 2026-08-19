@@ -54,7 +54,7 @@ export const createWarehouseSchema = z.object({
   priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
   assignedTo: z.string().optional(),
   dock: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const updateWarehouseSchema = createWarehouseSchema.partial().extend({
@@ -102,7 +102,7 @@ export const updateDriverSchema = createDriverSchema.partial();
 // ── CSV Import ──
 export const csvImportSchema = z.object({
   entity_type: z.enum(["shipment", "inventory", "order"]),
-  rows: z.array(z.record(z.unknown())).min(1, "at least one row required"),
+  rows: z.array(z.record(z.string(), z.unknown())).min(1, "at least one row required"),
 });
 
 // ── Integration Action ──

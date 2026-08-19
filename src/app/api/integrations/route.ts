@@ -195,10 +195,10 @@ export async function GET(request: NextRequest) {
 
 const createIntegrationSchema = z.object({
   type: z.string().min(1, "type is required"),
-  config: z.record(z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, _user) => {
   try {
     const validation = await validateBody(request, createIntegrationSchema);
     if (!validation.success) return validation.error;

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { callMcpAction, listMcpCoverage } from "../src/lib/mcp/index";
 
 // Mock the MCP server classes to avoid real DB/API calls
-vi.mock("../../mcp-servers/shiprocket/index", () => ({
+vi.mock("../mcp-servers/shiprocket/index", () => ({
   ShiprocketMCP: class {
     async init() {}
     async trackShipment(awb: string) {
@@ -11,7 +11,7 @@ vi.mock("../../mcp-servers/shiprocket/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/tally/index", () => ({
+vi.mock("../mcp-servers/tally/index", () => ({
   TallyMCP: class {
     async init() {}
     async syncInventory() {
@@ -20,7 +20,7 @@ vi.mock("../../mcp-servers/tally/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/ewaybill/index", () => ({
+vi.mock("../mcp-servers/ewaybill/index", () => ({
   EwayBillMCP: class {
     async init() {}
     async validateGstin(gstin: string) {
@@ -29,7 +29,7 @@ vi.mock("../../mcp-servers/ewaybill/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/mapmyindia/index", () => ({
+vi.mock("../mcp-servers/mapmyindia/index", () => ({
   MapmyIndiaMCP: class {
     async init() {}
     async geocode(address: string) {
@@ -38,7 +38,7 @@ vi.mock("../../mcp-servers/mapmyindia/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/fleet/index", () => ({
+vi.mock("../mcp-servers/fleet/index", () => ({
   FleetMCP: class {
     async init() {}
     async getFleetStatus() {
@@ -47,7 +47,7 @@ vi.mock("../../mcp-servers/fleet/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/shopify/index", () => ({
+vi.mock("../mcp-servers/shopify/index", () => ({
   ShopifyMCP: class {
     async init() {}
     async syncOrdersShopify(limit: number) {
@@ -59,7 +59,7 @@ vi.mock("../../mcp-servers/shopify/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/googlesheets/index", () => ({
+vi.mock("../mcp-servers/googlesheets/index", () => ({
   GoogleSheetsMCP: class {
     async init() {}
     async syncToDb(p: any) {
@@ -68,7 +68,7 @@ vi.mock("../../mcp-servers/googlesheets/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/erp/index", () => ({
+vi.mock("../mcp-servers/erp/index", () => ({
   ErpMCP: class {
     async init() {}
     async syncOrders(dateFrom?: string) {
@@ -77,7 +77,7 @@ vi.mock("../../mcp-servers/erp/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/compliance/index", () => ({
+vi.mock("../mcp-servers/compliance/index", () => ({
   ComplianceMCP: class {
     async init() {}
     async checkDriverLicense(license: string) {
@@ -86,7 +86,7 @@ vi.mock("../../mcp-servers/compliance/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/email/index", () => ({
+vi.mock("../mcp-servers/email/index", () => ({
   EmailMCP: class {
     async init() {}
     async sendTrackingUpdate(p: any) {
@@ -95,7 +95,7 @@ vi.mock("../../mcp-servers/email/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/fedex/index", () => ({
+vi.mock("../mcp-servers/fedex/index", () => ({
   FedexMCP: class {
     async init() {}
     async trackFedex(trackingNumber: string) {
@@ -104,7 +104,7 @@ vi.mock("../../mcp-servers/fedex/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/weather/index", () => ({
+vi.mock("../mcp-servers/weather/index", () => ({
   WeatherMCP: class {
     async init() {}
     async currentWeather(lat: number, lng: number) {
@@ -113,7 +113,7 @@ vi.mock("../../mcp-servers/weather/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/wms/index", () => ({
+vi.mock("../mcp-servers/wms/index", () => ({
   WmsMCP: class {
     async init() {}
     async checkInventory(p: any) {
@@ -122,7 +122,7 @@ vi.mock("../../mcp-servers/wms/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/scanner/index", () => ({
+vi.mock("../mcp-servers/scanner/index", () => ({
   ScannerMCP: class {
     async init() {}
     async checkSku(barcode: string) {
@@ -131,7 +131,7 @@ vi.mock("../../mcp-servers/scanner/index", () => ({
   },
 }));
 
-vi.mock("../../mcp-servers/dockscheduler/index", () => ({
+vi.mock("../mcp-servers/dockscheduler/index", () => ({
   DockSchedulerMCP: class {
     async init() {}
     async bookDock(p: any) {

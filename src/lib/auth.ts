@@ -198,7 +198,7 @@ export async function getSessionUser(request: Request): Promise<SessionUser | nu
 export type AuthenticatedHandler = (
   request: NextRequest,
   user: SessionUser,
-  ctx?: { params?: Record<string, string> }
+  ctx?: { params?: Promise<Record<string, string>> | Record<string, string> }
 ) => Promise<Response>;
 
 /**
@@ -207,7 +207,10 @@ export type AuthenticatedHandler = (
  * Passes the authenticated user to the handler.
  */
 export function withAuth(handler: AuthenticatedHandler) {
-  return async (request: NextRequest, ctx?: { params?: Record<string, string> }) => {
+  return async (
+    request: NextRequest,
+    ctx?: { params?: Promise<Record<string, string>> | Record<string, string> }
+  ) => {
     const user = await getSessionUser(request);
     if (!user) {
       return NextResponse.json(

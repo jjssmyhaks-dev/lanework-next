@@ -21,14 +21,14 @@ export const GET = withAuth(async (request) => {
   }
 });
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     const validation = await validateBody(request, createInventorySchema);
     if (!validation.success) return validation.error;
     const { sku, name, quantity, reorderPoint, warehouse, location } = validation.data;
 
     const id = crypto.randomUUID();
-    const user_id = userId || "default";
+    const user_id = user.id || "default";
 
     await sql`
       INSERT INTO inventory (id, user_id, sku, name, quantity, reorder_point, warehouse, location)

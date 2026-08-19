@@ -21,17 +21,18 @@ export const GET = withAuth(async (request) => {
   }
 });
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     const validation = await validateBody(request, createVehicleSchema);
     if (!validation.success) return validation.error;
     const { plate, type, status, mileageKm } = validation.data;
 
     const id = crypto.randomUUID();
+    const userId = user.id;
 
     await sql`
       INSERT INTO fleet_vehicles (id, user_id, plate, type, status, mileage_km)
-      VALUES (${id}, ${user_id}, ${plate}, ${type}, ${status || "active"}, ${mileageKm ?? 0})
+      VALUES (${id}, ${userId}, ${plate}, ${type}, ${status || "active"}, ${mileageKm ?? 0})
     `;
 
     const [vehicle] = await sql`

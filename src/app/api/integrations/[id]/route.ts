@@ -45,7 +45,7 @@ const INTEGRATION_CATALOG: Record<string, any> = {
 
 export const GET = withAuth(async (_request, _user, ctx) => {
   try {
-    const { id } = await params;
+    const { id } = await ctx!.params! as { id: string };
     const sql = neon(process.env.DATABASE_URL!);
 
     // First try catalog lookup (non-UUID identifiers like "shiprocket")
