@@ -23,9 +23,10 @@ export default function CustomerPage() {
   const fetchConversations = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/customer");
+      const res = await fetch("/api/customer?limit=100");
       const data = await res.json();
-      if (Array.isArray(data)) setConversations(data);
+      const items = Array.isArray(data) ? data : data.data;
+      if (Array.isArray(items)) setConversations(items);
       else if (data.error) setError(data.error);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }

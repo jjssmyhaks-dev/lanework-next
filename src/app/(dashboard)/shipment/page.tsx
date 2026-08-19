@@ -78,10 +78,11 @@ export default function ShipmentPage() {
   useEffect(() => {
     async function fetchShipments() {
       try {
-        const res = await fetch("/api/shipment");
+        const res = await fetch("/api/shipment?limit=100");
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) setShipments(data);
+          const items = Array.isArray(data) ? data : data.data;
+          if (Array.isArray(items) && items.length > 0) setShipments(items);
         }
       } catch {} finally { setLoading(false); }
     }

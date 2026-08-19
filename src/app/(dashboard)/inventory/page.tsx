@@ -33,9 +33,10 @@ export default function InventoryPage() {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/inventory");
+      const res = await fetch("/api/inventory?limit=100");
       const data = await res.json();
-      if (Array.isArray(data)) setItems(data);
+      const items = Array.isArray(data) ? data : data.data;
+      if (Array.isArray(items)) setItems(items);
       else if (data.error) setError(data.error);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }

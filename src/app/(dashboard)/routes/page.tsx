@@ -31,9 +31,10 @@ export default function RoutesPage() {
   const fetchRoutes = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/routes");
+      const res = await fetch("/api/routes?limit=100");
       const data = await res.json();
-      if (Array.isArray(data)) setRoutes(data);
+      const items = Array.isArray(data) ? data : data.data;
+      if (Array.isArray(items)) setRoutes(items);
       else if (data.error) setError(data.error);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }

@@ -29,9 +29,10 @@ export default function WarehousePage() {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/warehouse");
+      const res = await fetch("/api/warehouse?limit=100");
       const data = await res.json();
-      if (Array.isArray(data)) setTasks(data);
+      const items = Array.isArray(data) ? data : data.data;
+      if (Array.isArray(items)) setTasks(items);
       else if (data.error) setError(data.error);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }

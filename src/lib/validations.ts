@@ -117,7 +117,14 @@ export const searchSchema = z.object({
 });
 
 /**
+ * Maximum request body size in bytes (default: 1 MB).
+ * Prevents abuse from oversized payloads.
+ */
+const MAX_BODY_SIZE = 1_048_576; // 1 MB
+
+/**
  * Validate request body against a Zod schema.
+ * Includes body size check and content-type validation.
  * Returns { success: true, data } or { success: false, error: Response }.
  */
 export async function validateBody<T extends z.ZodType>(
@@ -125,7 +132,44 @@ export async function validateBody<T extends z.ZodType>(
   schema: T
 ): Promise<{ success: true; data: z.infer<T> } | { success: false; error: Response }> {
   try {
+    // Check content-type
+    const contentType = request.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      return {
+        success: false,
+        error: new Response(
+          JSON.stringify({ error: "Content-Type must be application/json" }),
+          { status: 415, headers: { "Content-Type": "application/json" } }
+        ),
+      };
+    }
+
+    // Check body size via Content-Length header
+    const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+    if (contentLength > MAX_BODY_SIZE) {
+      return {
+        success: false,
+        error: new Response(
+          JSON.stringify({ error: `Request body too large (max ${MAX_BODY_SIZE / 1024 / 1024}MB)` }),
+          { status: 413, headers: { "Content-Type": "application/json" } }
+        ),
+      };
+    }
+
     const body = await request.json();
+
+    // Post-parse size check (Content-Length is unreliable with compression)
+    const rawSize = new TextEncoder().encode(JSON.stringify(body)).byteLength;
+    if (rawSize > MAX_BODY_SIZE) {
+      return {
+        success: false,
+        error: new Response(
+          JSON.stringify({ error: `Request body too large (max ${MAX_BODY_SIZE / 1024 / 1024}MB)` }),
+          { status: 413, headers: { "Content-Type": "application/json" } }
+        ),
+      };
+    }
+
     const result = schema.safeParse(body);
     if (!result.success) {
       const firstError = result.error.issues[0];

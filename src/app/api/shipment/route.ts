@@ -2,6 +2,9 @@ import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { createShipmentSchema, validateBody } from "@/lib/validations";
+import { parsePagination, paginate } from "@/lib/pagination";
+import { auditLog, extractRequestMeta } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -26,20 +29,22 @@ function toApiShape(row: Record<string, unknown>) {
   };
 }
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (request) => {
   try {
+    const { limit, offset, page } = parsePagination(request);
     const shipments = await sql`
-      SELECT * FROM shipments ORDER BY created_at DESC
+      SELECT * FROM shipments ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
     `;
+    const [countResult] = await sql`SELECT COUNT(*)::int AS count FROM shipments`;
 
-    return NextResponse.json(shipments.map(toApiShape));
+    return NextResponse.json(paginate(shipments.map(toApiShape), countResult?.count || 0, { limit, offset, page }));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 });
 
-export const POST = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     const validation = await validateBody(request, createShipmentSchema);
     if (!validation.success) return validation.error;
@@ -83,9 +88,22 @@ export const POST = withAuth(async (request) => {
       SELECT * FROM shipments WHERE id = ${id}
     `;
 
+    logger.info("Shipment created", { id, trackingNumber: tn, carrier, userId: user.id });
+
+    // Audit log (best-effort, non-blocking)
+    auditLog({
+      userId: user.id,
+      action: "create",
+      entityType: "shipment",
+      entityId: id,
+      newValues: { trackingNumber: tn, carrier, status: status || "pending", origin, destination },
+      ...extractRequestMeta(request),
+    });
+
     return NextResponse.json(toApiShape(shipment), { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
+    logger.error("Shipment creation failed", { error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 });

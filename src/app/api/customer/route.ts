@@ -2,16 +2,19 @@ import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { createCustomerSchema, validateBody } from "@/lib/validations";
+import { parsePagination, paginate } from "@/lib/pagination";
 
 const sql = neon(process.env.DATABASE_URL!);
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (request) => {
   try {
+    const { limit, offset, page } = parsePagination(request);
     const customers = await sql`
-      SELECT * FROM customers ORDER BY created_at DESC
+      SELECT * FROM customers ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
     `;
+    const [countResult] = await sql`SELECT COUNT(*)::int AS count FROM customers`;
 
-    return NextResponse.json(customers);
+    return NextResponse.json(paginate(customers, countResult?.count || 0, { limit, offset, page }));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });

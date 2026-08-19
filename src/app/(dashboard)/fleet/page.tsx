@@ -36,11 +36,13 @@ export default function FleetPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [dRes, vRes] = await Promise.all([fetch("/api/fleet/drivers"), fetch("/api/fleet/vehicles")]);
+      const [dRes, vRes] = await Promise.all([fetch("/api/fleet/drivers?limit=100"), fetch("/api/fleet/vehicles?limit=100")]);
       const dData = await dRes.json();
       const vData = await vRes.json();
-      if (Array.isArray(dData)) setDrivers(dData);
-      if (Array.isArray(vData)) setVehicles(vData);
+      const dItems = Array.isArray(dData) ? dData : dData.data;
+      const vItems = Array.isArray(vData) ? vData : vData.data;
+      if (Array.isArray(dItems)) setDrivers(dItems);
+      if (Array.isArray(vItems)) setVehicles(vItems);
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   };

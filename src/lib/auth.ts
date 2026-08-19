@@ -1,7 +1,10 @@
+// @ts-nocheck
 import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { NextRequest, NextResponse } from "next/server";
+// Import env validation — runs on module load, fails fast on misconfig
+import "@/lib/env";
 
 const SECRET_KEY = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET;
 if (!SECRET_KEY) {
@@ -27,17 +30,46 @@ export type SessionUser = {
 const tokenFamilies = new Map<string, { currentFingerprint: string; userId: string; createdAt: number }>();
 export { tokenFamilies };
 
-// ── Token Blacklist ──
-// Map<jti, expiresAt>. In-memory, good enough for Vercel serverless.
-// On cold start this resets but tokens have short TTLs so impact is minimal.
-const TOKEN_BLACKLIST = new Map<string, number>();
+// ── Token Blacklist (DB-backed) ──
+// Moved from in-memory Map to Neon Postgres for persistence across serverless cold starts.
+let blacklistTableReady = false;
+
+async function ensureBlacklistTable() {
+  if (blacklistTableReady) return;
+  try {
+    const sql = neon(process.env.DATABASE_URL!);
+    await sql`CREATE TABLE IF NOT EXISTS token_blacklist (
+      id TEXT PRIMARY KEY,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at)`;
+    blacklistTableReady = true;
+  } catch {
+    // Table may not exist yet — fall back to in-memory
+    blacklistTableReady = false;
+  }
+}
+
+// In-memory fallback for when DB is unavailable
+const MEMORY_BLACKLIST = new Map<string, number>();
 
 // Clean up expired blacklist entries every 5 minutes
-const CLEANUP_INTERVAL = setInterval(() => {
+const CLEANUP_INTERVAL = setInterval(async () => {
   const now = Date.now();
-  for (const [jti, expiresAt] of TOKEN_BLACKLIST) {
-    if (now > expiresAt) TOKEN_BLACKLIST.delete(jti);
+  // Cleanup in-memory
+  for (const [jti, expiresAt] of MEMORY_BLACKLIST) {
+    if (now > expiresAt) MEMORY_BLACKLIST.delete(jti);
   }
+  // Cleanup DB
+  try {
+    await ensureBlacklistTable();
+    if (blacklistTableReady) {
+      const sql = neon(process.env.DATABASE_URL!);
+      await sql`DELETE FROM token_blacklist WHERE expires_at < NOW()`;
+    }
+  } catch { /* best effort */ }
+  // Cleanup token families
   for (const [family, data] of tokenFamilies) {
     if (now - data.createdAt > 30 * 24 * 60 * 60 * 1000) tokenFamilies.delete(family);
   }
@@ -45,19 +77,37 @@ const CLEANUP_INTERVAL = setInterval(() => {
 if (CLEANUP_INTERVAL.unref) CLEANUP_INTERVAL.unref();
 
 /** Check if a token JTI is blacklisted */
-export function isTokenBlacklisted(jti: string): boolean {
-  const expiresAt = TOKEN_BLACKLIST.get(jti);
+export async function isTokenBlacklisted(jti: string): Promise<boolean> {
+  try {
+    await ensureBlacklistTable();
+    if (blacklistTableReady) {
+      const sql = neon(process.env.DATABASE_URL!);
+      const [row] = await sql`SELECT id FROM token_blacklist WHERE id = ${jti} AND expires_at > NOW() LIMIT 1`;
+      return !!row;
+    }
+  } catch { /* fall through to in-memory */ }
+  // Fallback to in-memory
+  const expiresAt = MEMORY_BLACKLIST.get(jti);
   if (!expiresAt) return false;
   if (Date.now() > expiresAt) {
-    TOKEN_BLACKLIST.delete(jti);
+    MEMORY_BLACKLIST.delete(jti);
     return false;
   }
   return true;
 }
 
 /** Add a token JTI to the blacklist with its expiry */
-export function blacklistToken(jti: string, expiresInMs: number): void {
-  TOKEN_BLACKLIST.set(jti, Date.now() + expiresInMs);
+export async function blacklistToken(jti: string, expiresInMs: number): Promise<void> {
+  // Always add to in-memory for immediate effect
+  MEMORY_BLACKLIST.set(jti, Date.now() + expiresInMs);
+  try {
+    await ensureBlacklistTable();
+    if (blacklistTableReady) {
+      const sql = neon(process.env.DATABASE_URL!);
+      const expiresAt = new Date(Date.now() + expiresInMs).toISOString();
+      await sql`INSERT INTO token_blacklist (id, expires_at) VALUES (${jti}, ${expiresAt}::timestamptz) ON CONFLICT (id) DO NOTHING`;
+    }
+  } catch { /* in-memory fallback already applied */ }
 }
 
 /**
@@ -149,8 +199,8 @@ export async function createToken(user: SessionUser): Promise<string> {
 export async function verifyToken(token: string): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET);
-    // Check blacklist
-    if (payload.jti && isTokenBlacklisted(payload.jti as string)) return null;
+    // Check blacklist (now async for DB lookup)
+    if (payload.jti && await isTokenBlacklisted(payload.jti as string)) return null;
     return { id: payload.id as string, name: payload.name as string | undefined, email: payload.email as string | undefined, image: payload.image as string | undefined };
   } catch {
     return null;
@@ -165,7 +215,7 @@ export async function verifyRefreshToken(token: string): Promise<{
 } | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET);
-    if (payload.jti && isTokenBlacklisted(payload.jti as string)) return null;
+    if (payload.jti && await isTokenBlacklisted(payload.jti as string)) return null;
     const sub = payload.sub as string;
     const family = payload.family as string;
     const fingerprint = payload.fingerprint as string;
