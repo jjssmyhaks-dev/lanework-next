@@ -895,10 +895,10 @@ function DevApi() {
 /* ===== Pricing ===== */
 function Pricing() {
   const tiers = [
-    { name: "Starter", price: "₹24,999", per: "/mo", desc: "3 agents of your choice", quota: "5,000 tracked shipments / mo", cta: "Start Free Trial" },
-    { name: "Growth", price: "₹83,299", per: "/mo", desc: "All 6 agents", quota: "25,000 tracked shipments / mo", cta: "Start Free Trial", featured: true },
-    { name: "Scale", price: "₹2,49,999", per: "/mo", desc: "All 6 agents", quota: "50,000 tracked shipments / mo", cta: "Start Free Trial" },
-    { name: "Enterprise", price: "Custom", per: "", desc: "All 6 agents, custom limits, SSO, dedicated support, custom SLAs", quota: "Volume pricing", cta: "Talk to Sales" },
+    { name: "Free Trial", price: "₹0", per: "/mo", desc: "10 AI chats/day, 20 shipments/mo, 2 integrations", quota: "No credit card required", cta: "Start Free" },
+    { name: "Starter", price: "₹999", per: "/mo", desc: "200 chats/day, 500 shipments, 5 integrations", quota: "Shiprocket + WhatsApp + Tally + GST + Maps", cta: "Start Free Trial", featured: true },
+    { name: "Growth", price: "₹2,999", per: "/mo", desc: "Unlimited chats, 5K shipments, all 15 integrations", quota: "FedEx, Shopify, Fleet, Compliance, API access", cta: "Start Free Trial" },
+    { name: "Enterprise", price: "₹7,999", per: "/mo", desc: "Unlimited everything, ERP, white-label, dedicated support", quota: "SAP B1, custom integrations, SLA", cta: "Talk to Sales" },
   ];
   return (
     <Section id="pricing" title={<>Simple pricing that <em className="italic">scales with you.</em></>}

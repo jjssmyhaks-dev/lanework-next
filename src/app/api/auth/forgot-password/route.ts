@@ -1,94 +1,78 @@
+/**
+ * POST /api/auth/forgot-password
+ * Accepts { email }, generates a time-limited reset token, and returns success.
+ * In production, this would send an email with the reset link.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
-import bcrypt from "bcryptjs";
-import { z } from "zod";
+import crypto from "crypto";
 
-const sendCodeSchema = z.object({
-  step: z.literal("send-code"),
-  email: z.string().email(),
-});
+const sql = neon(process.env.DATABASE_URL!);
 
-const verifyCodeSchema = z.object({
-  step: z.literal("verify-code"),
-  email: z.string().email(),
-  code: z.string().length(6),
-});
-
-const resetSchema = z.object({
-  step: z.literal("reset"),
-  email: z.string().email(),
-  code: z.string().length(6),
-  newPassword: z.string().min(3),
-});
-
-// In production, store reset codes in DB. For now we keep them in memory
-// and generate a deterministic code for demo purposes.
-const resetCodes = new Map<string, { code: string; expiresAt: number }>();
-
-function generateCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-function getCodeForEmail(email: string): string | null {
-  const entry = resetCodes.get(email);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    resetCodes.delete(email);
-    return null;
-  }
-  return entry.code;
+// Ensure reset_tokens table exists
+async function ensureTable() {
+  await sql`CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_prt_user ON password_reset_tokens(user_id)`;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const { email } = body;
 
-    // ─── Step 1: Send code ─────────────────────────────
-    const sendResult = sendCodeSchema.safeParse(body);
-    if (sendResult.success) {
-      const { email } = sendResult.data;
-      const sql = neon(process.env.DATABASE_URL!);
-      const [user] = await sql`SELECT id FROM users WHERE email = ${email}`;
-      if (!user) {
-        // Don't leak whether email exists; pretend we sent it
-        return NextResponse.json({ success: true, message: "If the email exists, a code has been sent" });
-      }
-      const code = generateCode();
-      resetCodes.set(email, { code, expiresAt: Date.now() + 10 * 60 * 1000 }); // 10 min TTL
-      console.log(`[FORGOT-PASSWORD] Reset code for ${email}: ${code}`); // In prod, send via email
-      return NextResponse.json({ success: true, message: "Reset code generated" });
+    if (!email || typeof email !== "string") {
+      return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    // ─── Step 2: Verify code ────────────────────────────
-    const verifyResult = verifyCodeSchema.safeParse(body);
-    if (verifyResult.success) {
-      const { email, code } = verifyResult.data;
-      const stored = getCodeForEmail(email);
-      if (!stored || stored !== code) {
-        return NextResponse.json({ success: false, error: "Invalid or expired reset code" }, { status: 400 });
-      }
-      return NextResponse.json({ success: true, message: "Code verified" });
+    await ensureTable();
+
+    // Always return success to prevent email enumeration
+    const successResponse = NextResponse.json({
+      success: true,
+      message: "If an account with that email exists, we've sent a password reset link.",
+    });
+
+    // Look up user
+    const [user] = await sql`SELECT id FROM users WHERE email = ${email.toLowerCase().trim()}`;
+    if (!user) {
+      // Don't reveal whether user exists
+      return successResponse;
     }
 
-    // ─── Step 3: Reset password ────────────────────────
-    const resetResult = resetSchema.safeParse(body);
-    if (resetResult.success) {
-      const { email, code, newPassword } = resetResult.data;
-      const stored = getCodeForEmail(email);
-      if (!stored || stored !== code) {
-        return NextResponse.json({ success: false, error: "Invalid or expired reset code" }, { status: 400 });
-      }
-      const sql = neon(process.env.DATABASE_URL!);
-      const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash(newPassword, salt);
-      await sql`UPDATE users SET password_hash = ${passwordHash} WHERE email = ${email}`;
-      resetCodes.delete(email);
-      return NextResponse.json({ success: true, message: "Password changed successfully" });
-    }
+    // Generate reset token
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-    return NextResponse.json({ success: false, error: "Invalid step" }, { status: 400 });
-  } catch (error: any) {
-    console.error("Forgot password error:", error);
-    return NextResponse.json({ success: false, error: error?.message || "Something went wrong" }, { status: 500 });
+    // Invalidate any existing tokens for this user
+    await sql`UPDATE password_reset_tokens SET used = true WHERE user_id = ${user.id} AND used = false`;
+
+    // Store hashed token
+    await sql`
+      INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+      VALUES (${crypto.randomUUID()}, ${user.id}, ${tokenHash}, ${expiresAt.toISOString()}::timestamptz)
+    `;
+
+    // In production: send email with reset link
+    // The link would be: ${NEXTAUTH_URL}/reset-password?token=${rawToken}
+    const resetUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/reset-password?token=${rawToken}`;
+    console.log(`[Auth] Password reset for ${email}: ${resetUrl}`);
+
+    // TODO: Send email via Resend/SMTP
+    // await sendEmail({ to: email, subject: "Reset your Lanework password", html: `...` });
+
+    return successResponse;
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Internal Server Error";
+    console.error("[Forgot Password]", msg);
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }
