@@ -1,12 +1,8 @@
 {
-  "framework": "nextjs",
-  "installCommand": "npm install",
-  "buildCommand": "npx next build",
-  "outputDirectory": ".next",
-  "functions": {
-    "src/app/api/**/*.ts": {
-      "memory": 512,
-      "maxDuration": 60
+  "crons": [
+    {
+      "path": "/api/agents/cron",
+      "schedule": "*/5 * * * *"
     }
-  }
+  ]
 }
