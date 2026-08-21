@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   MessageSquare, LayoutDashboard, Truck, Package, Route, Warehouse, Users,
   LogOut, Menu, X, Bot, Shield, BookOpen, Plug, ChevronDown, IndianRupee,
-  CreditCard, BarChart3, Settings, AlertTriangle, CheckCircle
+  CreditCard, BarChart3, Settings, AlertTriangle, CheckCircle, Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -34,6 +34,7 @@ const operationsNav = [
 const agentsNav = [
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/agents/control", label: "Control Panel", icon: Settings },
+  { href: "/agents/harness", label: "Harness", icon: Zap },
   { href: "/approvals", label: "Approvals", icon: CheckCircle },
   { href: "/alerts", label: "Alerts", icon: AlertTriangle },
   { href: "/agents/metrics", label: "Metrics", icon: BarChart3 },

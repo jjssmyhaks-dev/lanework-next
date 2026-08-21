@@ -11,6 +11,10 @@ import { withAuth } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { orchestrate } from "@/lib/chat/orchestrator";
 import { requireChatLimit } from "@/lib/feature-gate";
+import { guardInput } from "@/lib/guardrails/input-guard";
+import { guardOutput } from "@/lib/guardrails/output-guard";
+import { checkBudget, recordCost } from "@/lib/guardrails/cost-guard";
+import { logInjectionAttempt, logRateLimitHit } from "@/lib/security/audit-events"
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -56,6 +60,9 @@ export const POST = withAuth(async (request, user) => {
     // Rate limit: 20 messages/min per IP (stricter than integrations, looser than AI)
     const rl = rateLimit(request, { maxRequests: 20, windowMs: 60_000, group: "chat" });
     if (!rl.allowed) {
+      const forwarded = request.headers.get("x-forwarded-for");
+      const ip = forwarded?.split(",")[0]?.trim() || "unknown";
+      await logRateLimitHit(ip, "chat", 20);
       return NextResponse.json(
         { error: "Too many messages. Please wait a moment." },
         { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
@@ -71,11 +78,28 @@ export const POST = withAuth(async (request, user) => {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
-    if (message.length > 5000) {
-      return NextResponse.json({ error: "Message too long (max 5000 chars)" }, { status: 400 });
+    // ── Input Guard ──
+    const inputGuard = guardInput(message);
+    if (!inputGuard.safe) {
+      const forwarded = request.headers.get("x-forwarded-for");
+      const ip = forwarded?.split(",")[0]?.trim() || "unknown";
+      await logInjectionAttempt(user.id, ip, inputGuard.reasons.join("; "), message);
+      return NextResponse.json(
+        { error: "Your message was flagged by our safety system. Please rephrase." },
+        { status: 400 }
+      );
     }
 
     const userId = user.id;
+
+    // ── Cost Budget Check ──
+    const budget = await checkBudget(userId);
+    if (!budget.allowed) {
+      return NextResponse.json(
+        { error: budget.message, blocked: true, limitType: "cost" },
+        { status: 403 }
+      );
+    }
 
     // ── Enforce daily chat limit (hard block) ──
     const chatGate = await requireChatLimit(userId);
@@ -124,7 +148,14 @@ export const POST = withAuth(async (request, user) => {
     }));
 
     // If orchestrator returned empty reply (general intent), use a fallback
-    const reply = result.reply || "I'm not sure how to help with that. I can track shipments, check inventory, optimize routes, validate GSTINs, check weather, and more. Try asking about a specific task!";
+    const rawReply = result.reply || "I'm not sure how to help with that. I can track shipments, check inventory, optimize routes, validate GSTINs, check weather, and more. Try asking about a specific task!";
+
+    // ── Output Guard ──
+    const outputGuard = guardOutput(rawReply, { integration: result.toolCalls[0]?.integration, action: result.toolCalls[0]?.action });
+    const reply = outputGuard.sanitized;
+
+    // ── Record cost (estimate ~500 tokens per exchange) ──
+    await recordCost(userId, 300, 200, { integration: result.toolCalls[0]?.integration, action: result.toolCalls[0]?.action, threadId: activeThreadId as string });
 
     await sql`
       INSERT INTO chat_messages (id, thread_id, role, content, tool_calls, created_at)
