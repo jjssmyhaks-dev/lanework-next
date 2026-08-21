@@ -11,6 +11,8 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { AgentStatusWidget } from "@/components/ui/agent-status-widget";
+import { AlertFeed } from "@/components/ui/alert-feed";
 
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
@@ -165,6 +167,12 @@ function ActiveDashboard({ data, activity }: { data: any; activity: any[] }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Agent Status + Alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <AgentStatusWidget />
+        <AlertFeed limit={5} />
+      </div>
 
       {/* Activity Feed */}
       {activity.length > 0 && (

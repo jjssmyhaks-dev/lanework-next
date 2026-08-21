@@ -1,50 +1,77 @@
-import { NextRequest, NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
+/**
+ * /api/agents/trust — Agent trust level configuration.
+ *
+ * GET  → fetch all trust levels for the tenant
+ * POST → update trust levels (batch)
+ */
+
+import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
+import { getAllTrustLevels, setTrustLevel, type TrustLevel } from "@/lib/agents/trust";
 
-export const GET = withAuth(async (request) => {
+const AGENT_TYPES = [
+  "shipment_tracking",
+  "inventory_management",
+  "fleet_management",
+  "compliance",
+  "route_optimization",
+  "warehouse_operations",
+  "customer_communication",
+];
+
+const ACTION_TYPES = [
+  "track_shipment",
+  "create_shipment",
+  "cancel_shipment",
+  "reroute_shipment",
+  "reorder_stock",
+  "sync_inventory",
+  "schedule_maintenance",
+  "check_license",
+  "optimize_route",
+  "send_notification",
+  "send_whatsapp",
+  "generate_ewb",
+];
+
+export const GET = withAuth(async (request, user) => {
   try {
-    const { searchParams } = new URL(request.url);
-    const orgId = searchParams.get("orgId") || "default";
-    const sql = neon(process.env.DATABASE_URL!);
-
-    const configs = await sql`SELECT * FROM agent_trust_configs WHERE org_id = ${orgId} ORDER BY agent_type`;
-    // If empty, return defaults
-    if (!configs.length) {
-      return NextResponse.json({
-        configs: [
-          { agent_type: "shipment_tracking", trust_level: "propose_only", risk_threshold: 0.3, max_auto_value: 100 },
-          { agent_type: "inventory_optimizer", trust_level: "propose_only", risk_threshold: 0.3, max_auto_value: 100 },
-          { agent_type: "route_planner", trust_level: "propose_only", risk_threshold: 0.3, max_auto_value: 100 },
-          { agent_type: "warehouse_agent", trust_level: "propose_only", risk_threshold: 0.3, max_auto_value: 50 },
-          { agent_type: "customer_agent", trust_level: "auto_execute_low_risk", risk_threshold: 0.2, max_auto_value: 20 },
-          { agent_type: "fleet_agent", trust_level: "propose_only", risk_threshold: 0.3, max_auto_value: 50 },
-        ]
-      });
-    }
-    return NextResponse.json({ configs });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    const trustLevels = await getAllTrustLevels(user.id || "default");
+    return NextResponse.json({ trustLevels });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 });
 
-export const PUT = withAuth(async (request) => {
+export const POST = withAuth(async (request, user) => {
   try {
     const body = await request.json();
-    const { orgId, configs } = body;
-    if (!orgId || !configs) {
-      return NextResponse.json({ error: "orgId and configs required" }, { status: 400 });
+    const { configs } = body as {
+      configs: Array<{ agentType: string; actionType: string; trustLevel: TrustLevel }>;
+    };
+
+    if (!Array.isArray(configs) || configs.length === 0) {
+      return NextResponse.json({ error: "configs array required" }, { status: 400 });
     }
-    const sql = neon(process.env.DATABASE_URL!);
-    for (const c of configs) {
-      await sql`
-        INSERT INTO agent_trust_configs (id, org_id, agent_type, trust_level, risk_threshold, max_auto_value)
-        VALUES (${crypto.randomUUID()}, ${orgId}, ${c.agent_type}, ${c.trust_level}, ${c.risk_threshold || 0.3}, ${c.max_auto_value || 100})
-        ON CONFLICT (org_id, agent_type) DO UPDATE
-        SET trust_level = ${c.trust_level}, risk_threshold = ${c.risk_threshold}, max_auto_value = ${c.max_auto_value}`;
+
+    for (const config of configs) {
+      if (!config.agentType || !config.actionType || !config.trustLevel) {
+        return NextResponse.json({ error: "agentType, actionType, and trustLevel required" }, { status: 400 });
+      }
+      if (!["propose", "auto_low_risk", "full"].includes(config.trustLevel)) {
+        return NextResponse.json({ error: "trustLevel must be propose, auto_low_risk, or full" }, { status: 400 });
+      }
     }
-    return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+
+    const tenantId = user.id || "default";
+    for (const config of configs) {
+      await setTrustLevel(tenantId, config.agentType, config.actionType, config.trustLevel);
+    }
+
+    return NextResponse.json({ message: "Trust levels updated", count: configs.length });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Internal Server Error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 });

@@ -5,33 +5,45 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   MessageSquare, LayoutDashboard, Truck, Package, Route, Warehouse, Users,
-  LogOut, Menu, X, Bot, Shield, BookOpen, Plug, ChevronDown, Settings, IndianRupee, CreditCard, Bell, BarChart3
+  LogOut, Menu, X, Bot, Shield, BookOpen, Plug, ChevronDown, IndianRupee,
+  CreditCard, BarChart3, Settings, AlertTriangle, CheckCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { GlobalSearch } from "@/components/ui/global-search";
+import { NotificationBell } from "@/components/ui/notification-bell";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ToastProvider } from "@/components/ui/toast";
+
+// ── Organized Navigation ──
 
 const primaryNav = [
   { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
 
-const secondaryNav = [
+const operationsNav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/agents", label: "Agents", icon: Bot },
   { href: "/shipment", label: "Shipments", icon: Truck },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/routes", label: "Routes", icon: Route },
   { href: "/warehouse", label: "Warehouse", icon: Warehouse },
   { href: "/fleet", label: "Fleet", icon: Users },
   { href: "/customer", label: "Customers", icon: BookOpen },
+];
+
+const agentsNav = [
+  { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/agents/control", label: "Control Panel", icon: Settings },
+  { href: "/approvals", label: "Approvals", icon: CheckCircle },
+  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+  { href: "/agents/metrics", label: "Metrics", icon: BarChart3 },
+  { href: "/agents/trust", label: "Trust Settings", icon: Shield },
+];
+
+const settingsNav = [
   { href: "/integrations", label: "Integrations", icon: Plug },
-  { href: "/onboarding", label: "Setup", icon: Shield },
   { href: "/pricing", label: "Pricing", icon: IndianRupee },
   { href: "/billing", label: "Billing", icon: CreditCard },
-  { href: "/approvals", label: "Approvals", icon: Shield },
-  { href: "/agents/metrics", label: "Agent Metrics", icon: BarChart3 },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -40,15 +52,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [secondaryOpen, setSecondaryOpen] = useState(false);
+  const [agentsExpanded, setAgentsExpanded] = useState(true);
 
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (mounted && !loading && !user) { router.push("/login"); }
   }, [mounted, loading, user, router]);
-
-
 
   if (!mounted) {
     return (
@@ -70,6 +80,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!user) return null;
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
     <ToastProvider>
@@ -95,56 +107,79 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
           {/* Primary — Chat */}
-          {primaryNav.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                  isActive ? "bg-black text-white" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                )}
-              >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                {item.label}
-              </Link>
-            );
-          })}
+          {primaryNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                isActive(item.href) ? "bg-black text-white" : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+              )}
+            >
+              <item.icon className="h-5 w-5 flex-shrink-0" />
+              {item.label}
+            </Link>
+          ))}
 
-          {/* Divider */}
+          {/* Operations */}
           <div className="pt-3 pb-1">
-            <p className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Manage</p>
+            <p className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Operations</p>
           </div>
+          {operationsNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                isActive(item.href) ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              )}
+            >
+              <item.icon className="h-4 w-4 flex-shrink-0" />
+              {item.label}
+            </Link>
+          ))}
 
-          {/* Secondary — collapsed by default on mobile, always visible on desktop */}
-          <div className={cn("space-y-1", !secondaryOpen && "hidden lg:block")}>
-            {secondaryNav.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
-                    isActive ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                  )}
-                >
-                  <item.icon className="h-4 w-4 flex-shrink-0" />
-                  {item.label}
-                </Link>
-              );
-            })}
+          {/* AI Agents */}
+          <div className="pt-3 pb-1">
+            <button
+              onClick={() => setAgentsExpanded(!agentsExpanded)}
+              className="flex items-center gap-2 px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-600 w-full"
+            >
+              <ChevronDown className={cn("h-3 w-3 transition-transform", !agentsExpanded && "-rotate-90")} />
+              AI Agents
+            </button>
           </div>
+          {agentsExpanded && agentsNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                isActive(item.href) ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              )}
+            >
+              <item.icon className="h-4 w-4 flex-shrink-0" />
+              {item.label}
+            </Link>
+          ))}
 
-          {/* Expand/collapse secondary on mobile */}
-          <button
-            onClick={() => setSecondaryOpen(!secondaryOpen)}
-            className="lg:hidden flex items-center gap-2 px-3 py-2 text-xs text-gray-400 hover:text-gray-700"
-          >
-            <ChevronDown className={cn("h-3 w-3 transition-transform", secondaryOpen && "rotate-180")} />
-            {secondaryOpen ? "Less" : "More"}
-          </button>
+          {/* Settings */}
+          <div className="pt-3 pb-1">
+            <p className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Settings</p>
+          </div>
+          {settingsNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                isActive(item.href) ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+              )}
+            >
+              <item.icon className="h-4 w-4 flex-shrink-0" />
+              {item.label}
+            </Link>
+          ))}
         </nav>
 
         {/* User */}
@@ -172,7 +207,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header — minimal, just search + mobile toggle */}
+        {/* Header */}
         <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-6 border-b border-gray-200 bg-white gap-4">
           <button
             className="lg:hidden p-1.5 rounded-md hover:bg-gray-100 flex-shrink-0"
@@ -184,6 +219,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <GlobalSearch />
           </div>
           <div className="flex-1 sm:hidden" />
+
+          {/* Notification Bell */}
+          <NotificationBell />
+
           {user && (
             <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-medium text-white">
@@ -199,7 +238,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
         </header>
 
-        {/* Page content — full height for chat */}
+        {/* Page content */}
         <main className="flex-1 overflow-hidden bg-gray-50">
           <div className="h-full"><ErrorBoundary>{children}</ErrorBoundary></div>
         </main>

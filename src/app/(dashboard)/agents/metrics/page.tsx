@@ -116,7 +116,7 @@ export default function AgentMetricsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-[#1a1a2e] flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
               <BarChart3 className="h-7 w-7" />
               Agent Performance Metrics
             </h1>
@@ -210,7 +210,7 @@ export default function AgentMetricsPage() {
         {/* Agent Breakdown */}
         {metrics.feedbackByAgent.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
-            <h2 className="text-lg font-semibold text-[#1a1a2e] mb-4">Feedback by Agent Type</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Feedback by Agent Type</h2>
             <div className="space-y-3">
               {metrics.feedbackByAgent.map((f) => {
                 const accuracy = f.total > 0 ? Math.round((f.thumbs_up / f.total) * 100) : 0;
@@ -242,7 +242,7 @@ export default function AgentMetricsPage() {
         {/* Outcomes */}
         {metrics.outcomes.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-[#1a1a2e] mb-4">Outcome Tracking</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Outcome Tracking</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -291,7 +291,7 @@ function StatCard({ icon, label, value, sub, color }: {
         {icon}
         <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
       </div>
-      <div className="text-2xl font-bold text-[#1a1a2e]">{value}</div>
+      <div className="text-2xl font-bold text-gray-900">{value}</div>
       <div className="text-xs text-gray-400 mt-1">{sub}</div>
     </div>
   );
