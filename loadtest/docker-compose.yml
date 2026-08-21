@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  k6:
+    image: grafana/k6:latest
+    volumes:
+      - .:/scripts
+    environment:
+      - BASE_URL=http://host.docker.internal:3000
+    command: run /scripts/k6-api.js
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+volumes:
+  grafana-data:

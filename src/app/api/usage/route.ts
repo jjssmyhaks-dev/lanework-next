@@ -6,12 +6,16 @@
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { getUserPlan, getUserUsage, getPlanFeatures, PLANS } from "@/lib/pricing";
+import { cacheWrap } from "@/lib/cache";
 
 export const GET = withAuth(async (_request, user) => {
   try {
-    const plan = await getUserPlan(user.id);
+    const { plan, usage } = await cacheWrap(`usage:${user.id}`, async () => {
+      const plan = await getUserPlan(user.id);
+      const usage = await getUserUsage(user.id);
+      return { plan, usage };
+    }, 15); // 15 second cache for usage
     const features = getPlanFeatures(plan);
-    const usage = await getUserUsage(user.id);
 
     const limitEntry = (key: string, current: number, max: number, label: string) => ({
       current,

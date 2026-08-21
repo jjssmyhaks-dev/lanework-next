@@ -1,416 +1,329 @@
-# Lanework — Logistics Assistant for Indian MSMEs
+# 🚛 Lanework
 
-**No technical skills required.** Lanework is a smart assistant that handles your daily logistics — tracking packages, managing inventory, planning routes, and keeping customers updated. All from one chat-based interface.
+> AI-powered logistics platform for Indian MSMEs — track shipments, manage inventory, optimize routes, and automate operations through natural language chat. No technical skills required.
 
-> 15 MCP integrations · 58 tools · 34 database tables · Chat-first interface · Real API + simulated fallback
-
-👉 **New user?** Read [User Guide](docs/USER-GUIDE.md) — step-by-step in plain English.
-👉 **Setting up for a team?** Read [Deployment Guide](docs/DEPLOYMENT.md).
+**Live:** [lanework-next-delta.vercel.app](https://lanework-next-delta.vercel.app)
+**Stack:** Next.js 16 · React 19 · Neon PostgreSQL · Cloudflare Workers AI · MCP Protocol
 
 ---
 
-## What Can Lanework Do?
+## 🎯 What Lanework Does
 
-- 🔍 **Track packages** across 7+ Indian carriers (BlueDart, Delhivery, DTDC, and more)
-- 💬 **Chat-first interface** — ask questions in natural language, get answers with live data
-- 📦 **Manage inventory** — know what's in stock, what needs reordering
-- 🗺️ **Plan delivery routes** — fastest path with real-time traffic and weather
-- 📱 **Send WhatsApp updates** — automatically notify customers about their deliveries
-- 🚛 **Track vehicles** — GPS location, maintenance alerts, driver hours
-- 🧾 **Generate e-way bills** — GST compliant, directly from shipment data
-- 📊 **Connect your tools** — Shiprocket, TallyPrime, Shopify, Google Sheets, and more
+| Feature | Description |
+|---------|-------------|
+| **AI Chat** | Natural language interface — "Where's shipment #4521?" triggers real MCP tool calls |
+| **15 MCP Integrations** | Shiprocket, FedEx, TallyPrime, Shopify, MapmyIndia, Weather, ERP, and more |
+| **Autonomous Agents** | Background pollers monitor shipments (5min), inventory (30min), fleet (10min), compliance (daily) |
+| **Self-Learning** | Agents learn from feedback, adjust risk scores, improve accuracy over time |
+| **Team Management** | Multi-tenant orgs with RBAC (Super Admin → Viewer), email invites |
+| **Indian Pricing** | ₹0/₹999/₹2,999/₹7,999 per month + GST, 75%+ gross margin |
 
 ---
 
-## Quick Start (2 Minutes)
+## 🏗️ Architecture
 
-### Prerequisites
-
-1. A [GitHub](https://github.com) account
-2. A [Vercel](https://vercel.com) account (free tier works)
-3. A [Neon](https://neon.tech) database (free — 0.5 GB storage)
-
-### Option A: Deploy to Vercel (Recommended)
-
-```bash
-# 1. Fork the repo
-# Go to https://github.com/jjssmyhaks-dev/lanework-next → Click "Fork"
-
-# 2. Deploy on Vercel
-# Go to https://vercel.com/new → Import your forked repo
-
-# 3. Add environment variables (see Environment Variables section below)
-# At minimum: DATABASE_URL + NEXTAUTH_SECRET + NEXTAUTH_URL
-
-# 4. Deploy — Vercel auto-runs `prisma db push` on first deploy
-# Your app is live at https://your-app.vercel.app
+```
+┌─────────────────────────────────────────────────┐
+│                    Frontend                       │
+│  Next.js 16 (Turbopack) · React 19 · Tailwind   │
+│  43 pages · 24 components · Chat-first UI        │
+└──────────────────────┬──────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────┐
+│                 API Layer                         │
+│  60 REST routes · JWT auth · Zod validation       │
+│  Rate limiting · Audit logging · Sentry           │
+└──────────────────────┬──────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────┐
+│              AI & Agent System                    │
+│  Chat Orchestrator · Intent Detection             │
+│  5 Background Pollers · Workflow Engine           │
+│  Trust System · Approval Queue · Learning Engine  │
+│  Guardrails (input/output/cost/circuit breaker)   │
+└──────────────────────┬──────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────┐
+│           15 MCP Servers (58 tools)               │
+│  Shiprocket · TallyPrime · E-Way Bill · FedEx    │
+│  Shopify · WooCommerce · MapmyIndia · Weather     │
+│  Google Sheets · ERP (SAP B1) · WMS · Scanner    │
+│  Compliance · Dock Scheduler · Fleet              │
+└──────────────────────┬──────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────┐
+│              Data Layer                           │
+│  Neon PostgreSQL (34+ tables) · Prisma ORM       │
+│  AES-256-GCM credential encryption                │
+└─────────────────────────────────────────────────┘
 ```
 
-### Option B: Run Locally
+---
 
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18+
+- npm or pnpm
+- Neon PostgreSQL database (free tier works)
+
+### 1. Clone & Install
 ```bash
-# 1. Clone and install
 git clone https://github.com/jjssmyhaks-dev/lanework-next.git
 cd lanework-next
 npm install
+```
 
-# 2. Set up environment
+### 2. Environment Setup
+```bash
 cp .env.example .env.local
-# Edit .env.local — at minimum add DATABASE_URL and NEXTAUTH_SECRET
+```
 
-# 3. Initialize database
-npx prisma db push
+Fill in the required variables (see [Environment Variables](#environment-variables) below).
 
-# 4. Start development server
+### 3. Run
+```bash
 npm run dev
 ```
 
-Open **http://localhost:3000** → Register → Start using.
+Open [http://localhost:3000](http://localhost:3000)
 
----
-
-## Environment Variables
-
-### Required (app won't start without these)
-
-| Variable | How to get |
-|----------|-----------|
-| `DATABASE_URL` | [Neon](https://neon.tech) → Create project → Copy connection string (PostgreSQL) |
-| `NEXTAUTH_SECRET` | Run `openssl rand -hex 32` in terminal |
-| `NEXTAUTH_URL` | Your app URL: `http://localhost:3000` (local) or `https://your-app.vercel.app` (production) |
-
-### Optional — Enable Live Integrations
-
-Add these to unlock real API data instead of simulated responses. The app works perfectly without them.
-
-#### Shipping & Tracking
-
-| Variable | Service | How to get |
-|----------|---------|-----------|
-| `SHIPROCKET_EMAIL` | [Shiprocket](https://shiprocket.in) | Sign up → Settings → API → use your login email |
-| `SHIPROCKET_PASSWORD` | Shiprocket | Your Shiprocket login password |
-| `FEDEX_API_KEY` | [FedEx Developer](https://developer.fedex.com) | Create app → Get API key |
-| `FEDEX_API_SECRET` | FedEx Developer | Same app → Get API secret |
-
-#### Maps & Weather
-
-| Variable | Service | How to get |
-|----------|---------|-----------|
-| `OPENWEATHER_API_KEY` | [OpenWeatherMap](https://openweathermap.org/api) | Sign up → API keys → Copy key (free tier: 1,000 calls/day) |
-| `MAPMYINDIA_API_KEY` | [MapmyIndia](https://mapmyindia.com/api) | Register → Get API key |
-| `MAPMYINDIA_LICENSE_KEY` | MapmyIndia | Same dashboard → License key |
-
-#### E-Commerce
-
-| Variable | Service | How to get |
-|----------|---------|-----------|
-| `SHOPIFY_STORE_URL` | [Shopify](https://shopify.com) | Your store URL: `https://your-store.myshopify.com` |
-| `SHOPIFY_ACCESS_TOKEN` | Shopify Admin | Settings → Apps → Develop apps → Create app → Admin API access token |
-| `WOOCOMMERCE_URL` | [WooCommerce](https://woocommerce.com) | Your store URL |
-| `WOOCOMMERCE_CONSUMER_KEY` | WooCommerce | WooCommerce → Settings → Advanced → REST API → Create key |
-| `WOOCOMMERCE_CONSUMER_SECRET` | WooCommerce | Same key → Copy secret |
-
-#### Accounting & Compliance
-
-| Variable | Service | How to get |
-|----------|---------|-----------|
-| `TALLY_REST_URL` | TallyPrime | Tally → Help → Settings → Enable REST API (default: `http://localhost:9000`) |
-| `GSTN_API_KEY` | [GSTN API](https://docs.gst.gov.in) | Register as GST Suvidha Provider → Get API key |
-| `GSTN_USERNAME` | GSTN API | Your GSTN portal username |
-| `GSTN_PASSWORD` | GSTN API | Your GSTN portal password |
-
-#### AI & Search
-
-| Variable | Service | How to get |
-|----------|---------|-----------|
-| `CLOUDFLARE_AI_ACCOUNT_ID` | [Cloudflare](https://dash.cloudflare.com) | Dashboard → Workers & Pages → Account ID |
-| `CLOUDFLARE_AI_API_KEY` | Cloudflare | My Profile → API Tokens → Create token |
-| `GOOGLE_SHEETS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com) | APIs & Services → Credentials → Create API key |
-| `GOOGLE_SHEETS_SPREADSHEET_ID` | Google Sheets | Open your sheet → copy the long ID from the URL between `/d/` and `/edit` |
-
-#### ERP & Fleet
-
-| Variable | Service | How to get |
-|----------|---------|-----------|
-| `SAP_SERVICE_LAYER_URL` | SAP Business One | Your SAP Service Layer URL |
-| `SAP_USERNAME` | SAP B1 | SAP login username |
-| `SAP_PASSWORD` | SAP B1 | SAP login password |
-| `FLEET_API_KEY` | [LocoNav](https://loconav.com) / [FleetX](https://fleetx.io) | Register → Get API key |
-
-#### Communication
-
-| Variable | Service | How to get |
-|----------|---------|-----------|
-| `SMTP_HOST` | Any SMTP provider | SMTP server address (e.g., `smtp.gmail.com`) |
-| `SMTP_PORT` | SMTP | Port (usually `587` or `465`) |
-| `SMTP_USER` | SMTP | Your email address |
-| `SMTP_PASS` | SMTP | App password (not your login password) |
-| `WHATSAPP_PHONE_NUMBER_ID` | [WhatsApp Business API](https://developers.facebook.com) | Meta Business → WhatsApp → Phone Number ID |
-| `WHATSAPP_ACCESS_TOKEN` | WhatsApp Business API | Same dashboard → Permanent access token |
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Lanework Architecture                     │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
-│  │  Chat UI     │    │  Dashboard   │    │  Agent Pages  │       │
-│  │  (Primary)   │    │  (Secondary) │    │  (6 agents)  │       │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘       │
-│         │                   │                    │                │
-│         └───────────┬───────┴────────────────────┘               │
-│                     │                                            │
-│              ┌──────▼───────┐                                    │
-│              │  Chat        │                                    │
-│              │  Orchestrator│  ← Intent detection + tool routing │
-│              └──────┬───────┘                                    │
-│                     │                                            │
-│         ┌───────────▼───────────┐                                │
-│         │   15 MCP Servers      │                                │
-│         │   58 Tools            │                                │
-│         │   (live/db/simulated) │                                │
-│         └───────────┬───────────┘                                │
-│                     │                                            │
-│    ┌────────────────┼────────────────┐                           │
-│    │                │                │                           │
-│  ┌─▼──┐  ┌────────▼────────┐  ┌───▼───┐                       │
-│  │ API │  │  External APIs  │  │ Neon  │                       │
-│  │Keys │  │  (15 services)  │  │  DB   │                       │
-│  └─────┘  └─────────────────┘  └───────┘                       │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Directory Structure
-
-```
-lanework-next/
-├── src/
-│   ├── app/
-│   │   ├── (auth)/               # Login & Register pages
-│   │   ├── (dashboard)/          # Main app: Chat, Dashboard, Shipments, Inventory,
-│   │   │   ├── chat/             #   Routes, Warehouse, Fleet, Customers, Integrations
-│   │   │   ├── dashboard/        #   Dashboard with animated stats & activity feed
-│   │   │   ├── shipment/         #   Shipment tracking & management
-│   │   │   ├── inventory/        #   Stock levels with visual progress bars
-│   │   │   ├── routes/           #   Route planning & optimization
-│   │   │   ├── warehouse/        #   Dock scheduling & task management
-│   │   │   ├── fleet/            #   Vehicle & driver management
-│   │   │   ├── customer/         #   Customer communications
-│   │   │   └── integrations/     #   Connect/disconnect external tools
-│   │   ├── agents/               # 6 AI agent detail pages (live activity)
-│   │   └── api/                  # 40+ REST API endpoints
-│   ├── components/ui/            # Reusable UI: Toast, PageHeader, EmptyState, etc.
-│   └── lib/
-│       ├── auth.ts               # JWT with refresh tokens, blacklist, theft detection
-│       ├── rate-limit.ts         # Per-route rate limiting
-│       ├── chat/orchestrator.ts  # Chat intent detection + MCP tool routing
-│       ├── intent-detection.ts   # NL → structured intent parser
-│       ├── mcp/index.ts          # MCP adapter (58 tools wired to 15 servers)
-│       ├── validations.ts        # Zod schemas for all mutation endpoints
-│       └── sentry.ts             # Error monitoring
-│
-├── mcp-servers/                  # 15 standalone MCP servers
-│   ├── shared/server.ts          # Base class (PostgreSQL, API calls, fallback)
-│   ├── shiprocket/               # Indian carrier aggregator
-│   ├── tally/                    # TallyPrime accounting sync
-│   ├── ewaybill/                 # GSTN e-way bills
-│   ├── mapmyindia/               # Indian maps & route optimization
-│   ├── fleet/                    # Vehicle telematics
-│   ├── fedex/                    # International shipping (FedEx + DHL)
-│   ├── shopify/                  # D2C order sync (Shopify + WooCommerce)
-│   ├── erp/                      # SAP Business One
-│   ├── compliance/               # RTO/Parivahan checks
-│   ├── email/                    # Customer notifications
-│   ├── wms/                      # Warehouse management
-│   ├── googlesheets/             # Google Sheets 2-way sync
-│   ├── weather/                  # Route weather alerts (OpenWeatherMap)
-│   ├── dockscheduler/            # Dock slot management
-│   └── scanner/                  # Barcode/QR scanning
-│
-├── prisma/schema.prisma          # 34-table database schema
-├── test/                         # Vitest unit + integration tests
-└── docs/                         # User Guide + Deployment Guide
+### 4. Database
+Tables are created automatically on first run via `sql` tagged templates. For schema management:
+```bash
+npx prisma db push
 ```
 
 ---
 
-## MCP Servers — 15 Integrations, 58 Tools
+## 🔑 Environment Variables
 
-All MCP servers extend `LaneworkMCPServer` with graceful fallback: when an external API is unreachable or missing credentials, they automatically fall back to database-cached data instead of crashing.
+### Required
+| Variable | Description | How to get |
+|----------|-------------|------------|
+| `DATABASE_URL` | Neon PostgreSQL connection string | [neon.tech](https://neon.tech) → Dashboard → Connection string |
+| `JWT_SECRET` | Secret key for JWT tokens | `openssl rand -hex 32` |
+| `NEXTAUTH_SECRET` | Same as JWT_SECRET | `openssl rand -hex 32` |
 
-**Key feature:** Every MCP returns a `mode` field:
-- 🟢 **`"live"`** — Real API call succeeded
-- 🔵 **`"db-fallback"`** — Using cached database data
-- 🟡 **`"simulated"`** — Demo mode (API keys not configured)
+### AI (Cloudflare Workers AI)
+| Variable | Description | How to get |
+|----------|-------------|------------|
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID | [dash.cloudflare.com](https://dash.cloudflare.com) → Right sidebar |
+| `CLOUDFLARE_API_TOKEN` | API token with Workers AI permission | Cloudflare → My Profile → API Tokens → Create |
 
-| Server | What It Does | API Keys Needed | Tools |
-|--------|-------------|----------------|-------|
-| **Shiprocket** | Ship across India via 7+ carriers | `SHIPROCKET_EMAIL`, `SHIPROCKET_PASSWORD` | track, create, compare rates, cancel, label |
-| **TallyPrime** | Sync with Indian accounting software | `TALLY_REST_URL` | sync inventory, push orders, check ledger, check stock |
-| **E-Way Bill** | Generate GST e-way bills | `GSTN_API_KEY`, `GSTN_USERNAME`, `GSTN_PASSWORD` | generate, cancel, validate GSTIN |
-| **MapmyIndia** | Indian maps & route planning | `MAPMYINDIA_API_KEY`, `MAPMYINDIA_LICENSE_KEY` | geocode, optimize route, distance matrix |
-| **Fleet** | Vehicle tracking & maintenance | `FLEET_API_KEY` | track, status, alerts, driver reports |
-| **FedEx/DHL** | International shipping | `FEDEX_API_KEY`, `FEDEX_API_SECRET` | track, create shipment, cancel |
-| **Shopify/WooCommerce** | D2C store order sync | `SHOPIFY_*`, `WOOCOMMERCE_*` | sync orders, sync inventory |
-| **ERP (SAP B1)** | Enterprise resource planning | `SAP_*` | sync orders, push inventory, invoices |
-| **Compliance** | Vehicle & driver legal checks | `PARIVAHAN_API_KEY` | license check, registration, insurance |
-| **Email** | Customer notifications | `SMTP_*` | send tracking, auto-reply, inbox scan |
-| **WMS** | Warehouse management | `WMS_API_URL`, `WMS_API_KEY` | scan in/out, bin lookup, pick tasks |
-| **Google Sheets** | Spreadsheet sync | `GOOGLE_SHEETS_API_KEY` | read, write, 2-way sync |
-| **Weather** | Route disruption alerts | `OPENWEATHER_API_KEY` | current weather, route weather, alerts |
-| **Dock Scheduler** | Dock slot booking | *(database only)* | allocate, release, check availability |
-| **Scanner** | Barcode/QR verification | *(database only)* | scan, lookup, verify pick |
+### Integrations (bring your own API keys)
+| Variable | Service | How to get |
+|----------|---------|------------|
+| `SHIPROCKET_EMAIL` / `SHIPROCKET_PASSWORD` | Shiprocket | [shiprocket.com](https://shiprocket.com) → Settings → API |
+| `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_ACCESS_TOKEN` | WhatsApp Business | Meta Business → Settings → API Setup |
+| `TALLY_REST_URL` / `TALLY_COMPANY` | TallyPrime | Tally → Ctrl+Alt+R → copy REST URL |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Razorpay (payments) | Dashboard → Settings → API Keys |
+| `FEDEX_API_KEY` / `FEDEX_SECRET_KEY` | FedEx | [developer.fedex.com](https://developer.fedex.com) |
+| `SHOPIFY_STORE_URL` / `SHOPIFY_ACCESS_TOKEN` | Shopify | Admin → Settings → Apps → Develop apps |
+| `MAPMYINDIA_LICENSE_KEY` | MapmyIndia | [mapmyindia.com](https://mapmyindia.com) → Dashboard |
+| `GOOGLE_SHEETS_URL` | Google Sheets | Google Sheets → Share → Copy link |
 
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 16 (Turbopack), React 19, TypeScript |
-| Styling | Tailwind CSS v4, Lucide icons |
-| Backend | Next.js API Routes (serverless) |
-| Auth | JWT (`jose`) with refresh tokens, token family rotation, blacklist |
-| Database | Neon PostgreSQL (34 tables) + Prisma ORM |
-| AI | Cloudflare Workers AI (Llama 3 8B) |
-| Agent Framework | MCP (Model Context Protocol) — 15 servers, 58 tools |
-| Search | PostgreSQL full-text (`tsvector`/`tsquery`), `⌘K` global search |
-| Validation | Zod v4 + react-hook-form (frontend) + Zod schemas (API) + body size limits |
-| Logging | Pino JSON logger with redaction, audit logs to DB |
-| Testing | Vitest — 52 tests, 80% coverage threshold |
-| CI/CD | GitHub Actions → Vercel |
-| Monitoring | Sentry SDK |
-| Hosting | Vercel (serverless) |
+### Optional
+| Variable | Description |
+|----------|-------------|
+| `SENTRY_DSN` | Sentry error tracking |
+| `NEXT_PUBLIC_APP_URL` | Your production URL (for invites) |
 
 ---
 
-## Production Readiness
+## 📁 Project Structure
 
-### ✅ What's Done
-
-| Feature | Status | Details |
-|---------|--------|---------|
-| JWT Auth | ✅ | Refresh tokens, token family theft detection, DB-backed blacklist, logout-everywhere |
-| CORS | ✅ | Middleware-level origin enforcement via `CORS_ORIGINS` env var |
-| Security Headers | ✅ | CSP, X-Frame-Options, HSTS, X-Content-Type-Options, Permissions-Policy |
-| Rate Limiting | ✅ | Per-route: `/api/ai` 10/min, `/api/integrations` 30/min, `/api/chat` 20/min |
-| Input Validation | ✅ | Zod v4 schemas on all POST routes + body size limits (1MB) + content-type check |
-| Frontend Validation | ✅ | react-hook-form + Zod on login & register with inline error messages |
-| Error Boundaries | ✅ | React ErrorBoundary on dashboard layout + chat page |
-| Error Monitoring | ✅ | Sentry SDK with source maps |
-| Structured Logging | ✅ | Pino JSON logger with pretty-print in dev, redaction of sensitive fields |
-| Audit Logging | ✅ | All 7 mutation routes write to `audit_logs` table with IP + user-agent |
-| Pagination | ✅ | All 7 list GET endpoints support `?page=&limit=` (default 20, max 100) |
-| Env Validation | ✅ | Startup validation with clear error messages — fails hard in production |
-| Request IDs | ✅ | Every request gets a UUID `X-Request-ID` header for distributed tracing |
-| DB Migrations | ✅ | Prisma migrations baseline established (`prisma migrate dev` for new changes) |
-| SEO | ✅ | Full metadata: OpenGraph, Twitter cards, robots, keywords, title template |
-| Type Safety | ✅ | Full TypeScript — 0 errors |
-| Test Suite | ✅ | 52 passing tests (unit + integration) |
-| Graceful Degradation | ✅ | All 15 MCPs return simulated data when APIs unavailable — app never crashes |
-| Chat History | ✅ | Server-side persistence (GET/POST/DELETE with auth) |
-| Chat Orchestrator | ✅ | Intent detection for 20+ intents across all 15 integrations |
-| Full-Text Search | ✅ | PostgreSQL tsvector across shipments, inventory, customers |
-
-### ⚠️ Remaining Gaps (Nice-to-have)
-
-| Priority | Gap | Impact | Effort |
-|----------|-----|--------|--------|
-| **P3** | No OpenAPI/Swagger spec | Hard for third-party integrators | 4 hrs |
-| **P3** | No CSRF protection on POST routes | Vulnerable to cross-site requests | 2 hrs |
-| **P3** | No image optimization (`next/image`) | Slow page loads | 1 hr |
-| **P3** | No i18n (Hindi/regional) | Limited accessibility | 1 day |
-| **P3** | No PWA/offline support | App doesn't work offline | 2 days |
-| **P3** | No dark mode | Single theme only | 4 hrs |
-
----
-
-## Documentation
-
-| Document | Audience | Content |
-|----------|----------|---------|
-| [User Guide](docs/USER-GUIDE.md) | Non-technical users | Step-by-step: sign up, connect tools, common tasks, troubleshooting |
-| [Deployment Guide](docs/DEPLOYMENT.md) | Operators / DevOps | Vercel deploy, env vars, health checks, rollback, monitoring |
-| [Production Audit](audit/production-readiness.md) | Developers | Full audit: hardcoded values, broken features, MCP status |
-
----
-
-## Pricing (Indian Market)
-
-All prices in ₹ INR + applicable GST (18%). Designed for Indian MSMEs — no USD conversion, no hidden fees.
-
-| Plan | Monthly | Yearly (Save 2 months) | Per Extra User | Target Audience |
-|------|---------|----------------------|----------------|------------------|
-| **Free Trial** | ₹0 (7 days) | — | — | Try before you buy |
-| **Starter** | ₹999/mo (~₹33/day) | ₹9,999/yr | ₹199/mo | Small businesses shipping 1-50 orders/day |
-| **Growth** | ₹2,999/mo (~₹100/day) | ₹29,999/yr | ₹299/mo | Growing businesses with fleet + e-commerce |
-| **Enterprise** | ₹7,999/mo (~₹267/day) | ₹79,999/yr | ₹399/mo | Large operations with ERP + multiple warehouses |
-
-### What's included per plan
-
-| Feature | Free | Starter | Growth | Enterprise |
-|---------|------|---------|--------|------------|
-| AI Chat | 10/day | 200/day | Unlimited | Unlimited |
-| Team members | 1 | 3 | 10 | 50 |
-| Shipments/month | 20 | 500 | 5,000 | Unlimited |
-| Integrations | 2 | 5 | Unlimited | Unlimited |
-| Shiprocket | ✅ | ✅ | ✅ | ✅ |
-| WhatsApp | ❌ | ✅ | ✅ | ✅ |
-| TallyPrime | ❌ | ✅ | ✅ | ✅ |
-| GST e-Way Bill | ❌ | ✅ | ✅ | ✅ |
-| Google Sheets | ❌ | ❌ | ✅ | ✅ |
-| Shopify/WooCommerce | ❌ | ❌ | ✅ | ✅ |
-| FedEx (international) | ❌ | ❌ | ✅ | ✅ |
-| Fleet tracking | ❌ | ❌ | ✅ | ✅ |
-| Compliance | ❌ | ❌ | ✅ | ✅ |
-| ERP (SAP B1) | ❌ | ❌ | ❌ | ✅ |
-| API access | ❌ | ❌ | ✅ | ✅ |
-| White-label | ❌ | ❌ | ❌ | ✅ |
-| Priority support | ❌ | ❌ | ✅ | ✅ |
-| Dedicated manager | ❌ | ❌ | ❌ | ✅ |
-
-### Infrastructure Cost (per user/month)
-
-| Plan | Revenue | Cost (incl. AI) | Gross Margin |
-|------|---------|----------------|-------------|
-| Starter | ₹999 | ₹21 | **97.9%** |
-| Growth | ₹2,999 | ₹62 | **97.9%** |
-| Enterprise | ₹7,999 | ₹215 | **97.3%** |
-
-→ All plans exceed the 75% gross margin target (AI costs included).
-→ AI cost: ~₹0.005/conversation (Llama 3 8B via Cloudflare Workers AI).
+```
+src/
+├── app/
+│   ├── (auth)/              # Login, Register, Forgot/Reset Password, Join (invites)
+│   ├── (dashboard)/         # All dashboard pages (protected)
+│   │   ├── chat/            # AI Chat interface (primary)
+│   │   ├── dashboard/       # Dashboard home
+│   │   ├── shipment/        # Shipment management
+│   │   ├── inventory/       # Inventory management
+│   │   ├── fleet/           # Fleet & driver management
+│   │   ├── warehouse/       # Warehouse operations
+│   │   ├── routes/          # Route optimization
+│   │   ├── customer/        # Customer management
+│   │   ├── integrations/    # MCP integration setup
+│   │   ├── team/            # Team management & RBAC
+│   │   ├── agents/          # AI agent pages (metrics, control, trust, harness)
+│   │   ├── approvals/       # Agent approval queue
+│   │   ├── alerts/          # Alert dashboard
+│   │   ├── pricing/         # Pricing plans
+│   │   ├── billing/         # Billing & invoices
+│   │   ├── terms/           # Terms of Service
+│   │   └── privacy/         # Privacy Policy
+│   ├── api/                 # 60 REST API routes
+│   │   ├── auth/            # Login, Register, Refresh, Forgot/Reset Password
+│   │   ├── chat/            # Chat orchestrator + history
+│   │   ├── agents/          # Agent APIs (cron, alerts, approvals, metrics, harness)
+│   │   ├── org/             # Organisation, members, invites
+│   │   ├── shipment/        # Shipment CRUD
+│   │   ├── inventory/       # Inventory CRUD
+│   │   ├── fleet/           # Fleet CRUD
+│   │   ├── billing/         # Razorpay checkout + verification
+│   │   └── ...
+│   ├── agents/              # Agent detail pages (6 agents)
+│   └── page.tsx             # Landing page
+├── components/ui/           # 24 React components
+│   ├── chat/                # Message bubble, tool cards, quick actions
+│   ├── notification-bell.tsx
+│   ├── agent-status-widget.tsx
+│   └── ...
+├── lib/
+│   ├── agents/              # Autonomous agent system
+│   │   ├── scheduler.ts     # Cron scheduler for background pollers
+│   │   ├── pollers/         # 5 pollers (shipment, inventory, fleet, compliance, daily-report)
+│   │   ├── events.ts        # Typed event emitter (20+ events)
+│   │   ├── workflow-engine.ts # Multi-step workflow execution
+│   │   ├── trust.ts         # Trust level management
+│   │   ├── learning.ts      # Self-learning engine
+│   │   ├── harness.ts       # Agentic harness for continuous eval
+│   │   └── ...
+│   ├── guardrails/          # Input guard, output guard, cost guard, circuit breaker
+│   ├── security/            # Webhook verification, audit events
+│   ├── auth.ts              # JWT auth with refresh tokens
+│   ├── org.ts               # Organisation & RBAC
+│   ├── permissions.ts       # Permission definitions
+│   ├── pricing.ts           # Plan definitions, cost breakdown, margins
+│   ├── cache.ts             # In-memory TTL cache
+│   └── ...
+mcp-servers/                 # 15 MCP servers, 58 tools
+test/                        # 5 test files, 52 tests
+loadtest/                    # k6 load test suites
+prisma/                      # Database schema + migrations
+```
 
 ---
 
-## Documentation
+## 🤖 AI Agent System
 
-| Document | Audience | Content |
-|----------|----------|---------|
-| [User Guide](docs/USER-GUIDE.md) | Non-technical users | Step-by-step: sign up, connect tools, common tasks, troubleshooting |
-| [Deployment Guide](docs/DEPLOYMENT.md) | Operators / DevOps | Vercel deploy, env vars, health checks, rollback, monitoring |
-| [API Keys Reference](docs/API-KEYS.md) | Everyone | Every API key needed, with step-by-step setup for all 15 integrations |
-| [Production Audit](audit/production-readiness.md) | Developers | Full audit: hardcoded values, broken features, MCP status |
+### Background Pollers
+| Poller | Interval | What it does |
+|--------|----------|-------------|
+| Shipment Poller | Every 5 min | Checks all active shipments, detects delays, creates alerts |
+| Inventory Poller | Every 30 min | Checks stock levels, flags items below reorder point |
+| Fleet Poller | Every 10 min | Monitors vehicle locations, driver hours compliance |
+| Compliance Poller | Daily | Checks license expiry, RC renewal, challan status |
+| Daily Report | 8 AM IST | Generates summary of all operations |
+
+### Trust Levels
+| Level | Behavior |
+|-------|----------|
+| **Propose Only** | Agent creates approval requests, human approves all |
+| **Auto (Low Risk)** | Agent auto-executes actions with risk score < 0.3 |
+| **Full Auto** | Agent executes everything, human reviews weekly |
+
+### Self-Learning Loop
+```
+User Feedback (thumbs up/down)
+    ↓
+Learning Engine analyzes patterns
+    ↓
+Adaptive Risk adjusts scores
+    ↓
+Auto-Tuner applies high-confidence changes
+    ↓
+Harness detects regressions
+    ↓
+Dashboard shows improvement trends
+```
 
 ---
 
-## Contributing
+## 💰 Pricing & Cost Model
+
+| Plan | Price/mo | AI Chats | Shipments | Team | Gross Margin |
+|------|----------|----------|-----------|------|-------------|
+| **Free Trial** | ₹0 | 10/day | 20/mo | 1 | — |
+| **Starter** | ₹999 | 200/day | 500/mo | 3 | 97.9% |
+| **Growth** | ₹2,999 | Unlimited | 5,000/mo | 10 | 97.9% |
+| **Enterprise** | ₹7,999 | Unlimited | Unlimited | 50 | 97.3% |
+
+**AI Cost:** ~₹0.005 per conversation (Cloudflare Workers AI — Llama 3 8B)
+
+---
+
+## 🧪 Testing
+
+```bash
+# Unit tests
+npx vitest run
+
+# Type checking
+npx tsc --noEmit
+
+# Load testing
+k6 run loadtest/k6-api.js
+k6 run loadtest/k6-login.js
+k6 run loadtest/k6-chat.js
+```
+
+---
+
+## 🚢 Deployment
+
+### Vercel (Recommended)
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel --prod
+```
+
+### Environment Variables on Vercel
+Go to Project Settings → Environment Variables and add all variables from the table above.
+
+### Database Migration
+```bash
+# Push schema to Neon
+npx prisma db push
+
+# Or run the SQL migrations
+psql $DATABASE_URL < prisma/migrations/001_agent_system/migration.sql
+psql $DATABASE_URL < prisma/migrations/002_org_team/migration.sql
+```
+
+---
+
+## 🔒 Security
+
+- **JWT** with 15-min access tokens + 30-day refresh tokens
+- **Token blacklist** (DB-backed) for immediate revocation
+- **Token family tracking** for stolen refresh token detection
+- **RBAC** with 4 roles (Super Admin → Viewer)
+- **Rate limiting** per-route (10/min for AI, 30/min for integrations)
+- **Input guard** — detects 15+ prompt injection patterns
+- **Output guard** — masks API keys, passwords, PII in responses
+- **Circuit breaker** — auto-blocks failing MCP APIs after 5 failures
+- **CORS/CSP/HSTS** security headers
+- **AES-256-GCM** encryption for stored credentials
+- **Audit logging** on all mutations
+
+---
+
+## 📄 License
+
+Proprietary — © 2026 Lanework, Inc.
+
+---
+
+## 🤝 Contributing
 
 1. Fork the repo
-2. Create a feature branch: `git checkout -b feat/my-feature`
-3. Make your changes
-4. Run tests: `npm test`
-5. Run typecheck: `npm run typecheck`
-6. Commit: `git commit -m "feat: description"`
-7. Push: `git push origin feat/my-feature`
-8. Open a Pull Request
+2. Create a feature branch (`git checkout -b feature/amazing`)
+3. Run tests (`npx vitest run`)
+4. Commit (`git commit -m 'feat: amazing feature'`)
+5. Push (`git push origin feature/amazing`)
+6. Open a PR
 
 ---
 
-## License
+## 📞 Support
 
-Proprietary — All rights reserved.
+- **Email:** support@lanework.in
+- **Docs:** [docs.lanework.in](https://docs.lanework.in)
+- **Issues:** [GitHub Issues](https://github.com/jjssmyhaks-dev/lanework-next/issues)

@@ -474,3 +474,26 @@ export function getYearlySavings(planId: PlanId): string {
   const months = Math.round(saved / p.priceMonthly);
   return `Save ₹${saved.toLocaleString("en-IN")}/year (${months} months free)`;
 }
+
+// ── Plan Recommendation by Company Size ──
+
+type CompanySize = "solo" | "2-10" | "11-30" | "31-50" | "51-100" | "100+";
+
+export function suggestPlan(companySize: CompanySize): { plan: PlanId; reason: string; price: string } {
+  switch (companySize) {
+    case "solo":
+      return { plan: "free", reason: "Solo operators get full access to core features on the Free Trial", price: "Free" };
+    case "2-10":
+      return { plan: "starter", reason: "Small teams benefit from 3 team members, WhatsApp notifications, and route optimization", price: "₹999/mo" };
+    case "11-30":
+      return { plan: "starter", reason: "Growing teams can start with Starter and upgrade as needed", price: "₹999/mo" };
+    case "31-50":
+      return { plan: "growth", reason: "Larger teams need multiple warehouses, compliance automation, and unlimited integrations", price: "₹2,999/mo" };
+    case "51-100":
+      return { plan: "growth", reason: "Growth plan supports 10 users and 5,000 shipments/month", price: "₹2,999/mo" };
+    case "100+":
+      return { plan: "enterprise", reason: "Enterprise provides unlimited everything, API access, white-label, and dedicated support", price: "₹7,999/mo" };
+    default:
+      return { plan: "free", reason: "Start with the Free Trial — no credit card needed", price: "Free" };
+  }
+}

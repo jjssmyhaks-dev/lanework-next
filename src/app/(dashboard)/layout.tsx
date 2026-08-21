@@ -15,37 +15,52 @@ import { NotificationBell } from "@/components/ui/notification-bell";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { ToastProvider } from "@/components/ui/toast";
 
-// ── Organized Navigation ──
+// ── Organized Navigation with role requirements ──
 
 const primaryNav = [
-  { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/chat", label: "Chat", icon: MessageSquare, minRole: "viewer" as const },
 ];
 
 const operationsNav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/shipment", label: "Shipments", icon: Truck },
-  { href: "/inventory", label: "Inventory", icon: Package },
-  { href: "/routes", label: "Routes", icon: Route },
-  { href: "/warehouse", label: "Warehouse", icon: Warehouse },
-  { href: "/fleet", label: "Fleet", icon: Users },
-  { href: "/customer", label: "Customers", icon: BookOpen },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, minRole: "viewer" as const },
+  { href: "/shipment", label: "Shipments", icon: Truck, minRole: "viewer" as const },
+  { href: "/inventory", label: "Inventory", icon: Package, minRole: "viewer" as const },
+  { href: "/routes", label: "Routes", icon: Route, minRole: "viewer" as const },
+  { href: "/warehouse", label: "Warehouse", icon: Warehouse, minRole: "viewer" as const },
+  { href: "/fleet", label: "Fleet", icon: Users, minRole: "viewer" as const },
+  { href: "/customer", label: "Customers", icon: BookOpen, minRole: "viewer" as const },
 ];
 
 const agentsNav = [
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/agents/control", label: "Control Panel", icon: Settings },
-  { href: "/agents/harness", label: "Harness", icon: Zap },
-  { href: "/approvals", label: "Approvals", icon: CheckCircle },
-  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
-  { href: "/agents/metrics", label: "Metrics", icon: BarChart3 },
-  { href: "/agents/trust", label: "Trust Settings", icon: Shield },
+  { href: "/agents", label: "Agents", icon: Bot, minRole: "member" as const },
+  { href: "/agents/control", label: "Control Panel", icon: Settings, minRole: "admin" as const },
+  { href: "/agents/harness", label: "Harness", icon: Zap, minRole: "admin" as const },
+  { href: "/approvals", label: "Approvals", icon: CheckCircle, minRole: "admin" as const },
+  { href: "/alerts", label: "Alerts", icon: AlertTriangle, minRole: "admin" as const },
+  { href: "/agents/metrics", label: "Metrics", icon: BarChart3, minRole: "admin" as const },
+  { href: "/agents/trust", label: "Trust Settings", icon: Shield, minRole: "admin" as const },
 ];
 
 const settingsNav = [
-  { href: "/integrations", label: "Integrations", icon: Plug },
-  { href: "/pricing", label: "Pricing", icon: IndianRupee },
-  { href: "/billing", label: "Billing", icon: CreditCard },
+  { href: "/integrations", label: "Integrations", icon: Plug, minRole: "admin" as const },
+  { href: "/team", label: "Team", icon: Users, minRole: "admin" as const },
+  { href: "/pricing", label: "Pricing", icon: IndianRupee, minRole: "admin" as const },
+  { href: "/billing", label: "Billing", icon: CreditCard, minRole: "super_admin" as const },
 ];
+
+const ROLE_LEVELS: Record<string, number> = {
+  super_admin: 0,
+  admin: 1,
+  member: 2,
+  viewer: 3,
+};
+
+function canAccess(userRole: string | null | undefined, minRole: string): boolean {
+  if (!userRole) return true; // No org yet — show all (they'll create one)
+  const userLevel = ROLE_LEVELS[userRole] ?? 3;
+  const requiredLevel = ROLE_LEVELS[minRole] ?? 3;
+  return userLevel <= requiredLevel;
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -82,7 +97,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return null;
 
+  const userRole = (user as any).orgRole || "viewer";
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+
+  const filterByRole = <T extends { minRole: string }>(items: T[]) =>
+    items.filter(item => canAccess(userRole, item.minRole));
 
   return (
     <ToastProvider>
@@ -108,7 +127,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
           {/* Primary — Chat */}
-          {primaryNav.map((item) => (
+          {filterByRole(primaryNav).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -126,7 +145,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="pt-3 pb-1">
             <p className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Operations</p>
           </div>
-          {operationsNav.map((item) => (
+          {filterByRole(operationsNav).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -150,7 +169,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               AI Agents
             </button>
           </div>
-          {agentsExpanded && agentsNav.map((item) => (
+          {agentsExpanded && filterByRole(agentsNav).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -168,7 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="pt-3 pb-1">
             <p className="px-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Settings</p>
           </div>
-          {settingsNav.map((item) => (
+          {filterByRole(settingsNav).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -192,7 +211,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">{user.name || "User"}</p>
-                <p className="text-xs text-gray-500 truncate">{user.email || ""}</p>
+                <p className="text-xs text-gray-500 truncate">{user.org ? user.org.name : "No organisation"}</p>
               </div>
               <button
                 onClick={() => { logout(); router.push("/login"); }}

@@ -2,9 +2,31 @@
 
 import { useState, createContext, useContext, useEffect } from "react";
 
-export type User = { id: string; name?: string | null; email?: string | null; image?: string | null };
+export type User = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  orgId?: string | null;
+  orgRole?: string | null;
+  org?: {
+    id: string;
+    name: string;
+    plan?: string;
+    company_size?: string;
+  } | null;
+};
 
-const AuthContext = createContext<{ user: User | null; loading: boolean; login: (email: string, password: string) => Promise<boolean>; register: (name: string, email: string, password: string) => Promise<boolean>; logout: () => void }>(null!);
+type AuthContextType = {
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string, orgName?: string, companySize?: string) => Promise<boolean>;
+  logout: () => void;
+  refreshUser: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextType>(null!);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -30,15 +52,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch { return false; }
   };
 
-  const register = async (name: string, email: string, password: string) => {
+  const register = async (name: string, email: string, password: string, orgName?: string, companySize?: string) => {
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, orgName, companySize }),
       });
       const data = await res.json();
       if (!data.success) return false;
-      // Auto-login after register
       return await login(email, password);
     } catch { return false; }
   };
@@ -48,7 +69,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout }}>{children}</AuthContext.Provider>;
+  const refreshUser = async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      const data = await res.json();
+      if (data.user) setUser(data.user);
+    } catch { /* silent */ }
+  };
+
+  return <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() { return useContext(AuthContext); }

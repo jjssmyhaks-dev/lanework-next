@@ -43,7 +43,6 @@ export async function POST(request: NextRequest) {
     // Look up user
     const [user] = await sql`SELECT id FROM users WHERE email = ${email.toLowerCase().trim()}`;
     if (!user) {
-      // Don't reveal whether user exists
       return successResponse;
     }
 
@@ -61,13 +60,9 @@ export async function POST(request: NextRequest) {
       VALUES (${crypto.randomUUID()}, ${user.id}, ${tokenHash}, ${expiresAt.toISOString()}::timestamptz)
     `;
 
-    // In production: send email with reset link
-    // The link would be: ${NEXTAUTH_URL}/reset-password?token=${rawToken}
-    const resetUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/reset-password?token=${rawToken}`;
-    console.log(`[Auth] Password reset for ${email}: ${resetUrl}`);
-
-    // TODO: Send email via Resend/SMTP
-    // await sendEmail({ to: email, subject: "Reset your Lanework password", html: `...` });
+    // Send reset email
+    const { sendPasswordResetEmail } = await import("@/lib/email");
+    await sendPasswordResetEmail(email, rawToken);
 
     return successResponse;
   } catch (error: unknown) {

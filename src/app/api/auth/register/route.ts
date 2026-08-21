@@ -3,11 +3,15 @@ import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { createOrg } from "@/lib/org";
+import type { CompanySize } from "@/lib/org";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
   password: z.string().min(3, "Password must be at least 3 characters"),
+  orgName: z.string().optional(),
+  companySize: z.enum(["solo", "2-10", "11-30", "31-50", "51-100", "100+"]).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -22,7 +26,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password } = parsed.data;
+    const { name, email, password, orgName, companySize } = parsed.data;
     const sql = neon(process.env.DATABASE_URL!);
 
     // Check if user already exists
@@ -49,6 +53,17 @@ export async function POST(request: NextRequest) {
       RETURNING id, name, email, created_at
     `;
 
+    // Create organisation if orgName provided
+    let org = null;
+    if (orgName && orgName.trim()) {
+      try {
+        org = await createOrg(orgName.trim(), id, (companySize as CompanySize) || "solo");
+      } catch (e: any) {
+        console.error("Org creation error:", e);
+        // User created but org failed — not critical, they can create org later
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -57,6 +72,7 @@ export async function POST(request: NextRequest) {
           name: user.name,
           email: user.email,
         },
+        org: org ? { id: org.id, name: org.name } : null,
       },
       { status: 201 },
     );

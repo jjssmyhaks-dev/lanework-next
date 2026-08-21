@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bot, User, ThumbsUp, ThumbsDown, Clock } from "lucide-react";
+import { Bot, User, ThumbsUp, ThumbsDown, Clock, Copy, Check, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ToolResultCard from "./tool-result-card";
 
@@ -198,10 +198,28 @@ export default function MessageBubble({
   isStreaming,
 }: MessageBubbleProps) {
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleFeedback = (type: "up" | "down") => {
     setFeedback(type);
     onFeedback?.(type);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const relativeTime = (ts: string) => {
+    if (!ts) return "";
+    try {
+      const diff = Date.now() - new Date(ts).getTime();
+      if (diff < 60000) return "just now";
+      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+      return new Date(ts).toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+    } catch { return ts; }
   };
 
   return (
@@ -243,14 +261,33 @@ export default function MessageBubble({
           </div>
         )}
 
-        {/* Timestamp & feedback */}
+        {/* Timestamp & actions */}
         <div className={cn(
-          "flex items-center gap-2",
+          "flex items-center gap-2 group",
           role === "user" ? "justify-end" : "justify-start"
         )}>
-          <span className="text-[10px] text-gray-400">
-            {timestamp}
+          <span className="text-[10px] text-gray-400" title={timestamp}>
+            {relativeTime(timestamp)}
           </span>
+
+          {/* Copy button — always visible */}
+          <button
+            onClick={handleCopy}
+            className="p-0.5 rounded hover:bg-gray-100 transition-colors text-gray-300 hover:text-gray-600"
+            title="Copy message"
+          >
+            {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+          </button>
+
+          {role === "assistant" && !isStreaming && onRetry && (
+            <button
+              onClick={onRetry}
+              className="p-0.5 rounded hover:bg-gray-100 transition-colors text-gray-300 hover:text-gray-600"
+              title="Regenerate"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          )}
 
           {role === "assistant" && !isStreaming && onFeedback && (
             <div className="flex items-center gap-0.5">
