@@ -1,0 +1,27 @@
+{
+  "name": "Lanework — AI Logistics Platform",
+  "short_name": "Lanework",
+  "description": "AI-powered logistics platform for Indian MSMEs",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a1a2e",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "en-IN",
+  "dir": "ltr"
+}
