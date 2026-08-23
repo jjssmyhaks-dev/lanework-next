@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Loader2, Brain, Globe, Package, Shield, Workflow, BookOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useKnowledgeSuggest } from "@/components/ui/chat/use-knowledge-suggest";
+import type { KBSuggestion } from "@/components/ui/chat/use-knowledge-suggest";
 
 interface KBResult {
   id: string;
@@ -107,6 +111,44 @@ export default function KnowledgePage() {
     }
   }, [view, category]);
 
+  const {
+    query: suggestQuery,
+    setQuery: setSuggestQuery,
+    suggestions,
+    loading: suggestLoading,
+    selectedIndex,
+    setSelectedIndex,
+    handleKeyDown: suggestKeyDown,
+    dismiss: dismissSuggestions,
+  } = useKnowledgeSuggest({ debounceMs: 150 });
+
+  const handleSuggestSelect = useCallback((s: KBSuggestion) => {
+    setQuery(s.title);
+    dismissSuggestions();
+    // Auto-search with the selected suggestion
+    setTimeout(() => handleSearch(), 0);
+  }, [dismissSuggestions, handleSearch]);
+
+  const CATEGORY_SUGGEST_COLORS: Record<string, string> = {
+    mcp_tool: "text-blue-700 bg-blue-50 border-blue-200",
+    domain_entity: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    business_rule: "text-amber-700 bg-amber-50 border-amber-200",
+    api_endpoint: "text-purple-700 bg-purple-50 border-purple-200",
+    integration: "text-cyan-700 bg-cyan-50 border-cyan-200",
+    workflow: "text-rose-700 bg-rose-50 border-rose-200",
+    procedure: "text-indigo-700 bg-indigo-50 border-indigo-200",
+  };
+
+  const CATEGORY_SUGGEST_ICONS: Record<string, React.ReactNode> = {
+    mcp_tool: <Globe className="h-3 w-3" />,
+    domain_entity: <Package className="h-3 w-3" />,
+    business_rule: <Shield className="h-3 w-3" />,
+    api_endpoint: <Globe className="h-3 w-3" />,
+    integration: <Globe className="h-3 w-3" />,
+    workflow: <Workflow className="h-3 w-3" />,
+    procedure: <BookOpen className="h-3 w-3" />,
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -123,11 +165,69 @@ export default function KnowledgePage() {
         {/* Search Bar */}
         <div className="flex gap-3 mb-6">
           <div className="flex-1 relative">
+            {/* Suggest Popover */}
+            {(suggestions.length > 0 || suggestLoading) && (
+              <div className="absolute top-full left-0 right-0 mt-1 z-50">
+                <div className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50/50">
+                    <Brain className="h-3.5 w-3.5 text-gray-400" />
+                    <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Knowledge Base</span>
+                    {suggestLoading && <Loader2 className="h-3 w-3 text-gray-400 animate-spin" />}
+                  </div>
+                  <div className="max-h-[320px] overflow-y-auto">
+                    {suggestions.map((s, i) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleSuggestSelect(s)}
+                        className={cn(
+                          "w-full text-left px-3 py-2.5 flex items-start gap-3 transition-colors",
+                          i === selectedIndex ? "bg-blue-50" : "hover:bg-gray-50"
+                        )}
+                      >
+                        <span className={cn("mt-0.5 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium shrink-0", CATEGORY_SUGGEST_COLORS[s.category] || "bg-gray-100 text-gray-700 border-gray-200")}>
+                          {CATEGORY_SUGGEST_ICONS[s.category]}
+                          {s.category.replace(/_/g, " ")}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-800 truncate">{s.title}</p>
+                          <p className="text-xs text-gray-500 line-clamp-1 mt-0.5">{s.snippet}</p>
+                          {s.tags.length > 0 && (
+                            <div className="flex gap-1 mt-1">
+                              {s.tags.map((tag) => (
+                                <span key={tag} className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-1.5 border-t border-gray-100 bg-gray-50/50">
+                    <span className="text-[10px] text-gray-400">
+                      <kbd className="px-1 py-0.5 bg-gray-100 rounded text-[10px] font-mono">↑↓</kbd> navigate{' · '}
+                      <kbd className="px-1 py-0.5 bg-gray-100 rounded text-[10px] font-mono">Enter</kbd> search{' · '}
+                      <kbd className="px-1 py-0.5 bg-gray-100 rounded text-[10px] font-mono">Esc</kbd> dismiss
+                    </span>
+                    <span className="text-[10px] text-gray-400">{suggestions.length} result{suggestions.length !== 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+              </div>
+            )}
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              onChange={(e) => { setQuery(e.target.value); setSuggestQuery(e.target.value); }}
+              onKeyDown={(e) => {
+                if (suggestions.length > 0 && ["ArrowUp", "ArrowDown", "Escape"].includes(e.key)) {
+                  suggestKeyDown(e);
+                  return;
+                }
+                if (e.key === "Enter") {
+                  dismissSuggestions();
+                  handleSearch();
+                }
+              }}
+              onBlur={() => setTimeout(dismissSuggestions, 200)}
               placeholder="Search knowledge base... (e.g. 'track shipment', 'pricing plans', 'GSTIN validation')"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
