@@ -106,6 +106,7 @@ export async function middleware(request: NextRequest) {
 
   // For page routes, check cookie-based token
   const token =
+    request.cookies.get("auth-token")?.value ||
     request.cookies.get("lanework-token")?.value ||
     request.cookies.get("token")?.value;
 
@@ -122,6 +123,7 @@ export async function middleware(request: NextRequest) {
   } catch {
     // Token invalid — clear cookie and redirect to login
     const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("auth-token");
     response.cookies.delete("lanework-token");
     response.cookies.delete("token");
     return response;
