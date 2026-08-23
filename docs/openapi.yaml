@@ -1,0 +1,318 @@
+openapi: 3.1.0
+info:
+  title: Lanework API
+  version: 1.0.0
+  description: |
+    AI-powered logistics platform API for Indian MSMEs.
+    Track shipments, manage inventory, optimize routes, and automate operations.
+
+    ## Authentication
+    All protected endpoints require a Bearer token in the Authorization header.
+    Obtain tokens via POST /api/auth/login.
+
+    ## Rate Limits
+    - Chat: 20 req/min
+    - AI: 10 req/min
+    - Integrations: 30 req/min
+    - General: 60 req/min
+
+  contact:
+    name: Lanework Support
+    email: support@lanework.in
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://lanework-next-delta.vercel.app
+    description: Production
+  - url: http://localhost:3000
+    description: Development
+
+tags:
+  - name: Auth
+    description: Authentication and user management
+  - name: Chat
+    description: AI chat and orchestration
+  - name: Shipments
+    description: Shipment CRUD and tracking
+  - name: Inventory
+    description: Inventory management
+  - name: Fleet
+    description: Vehicle and driver management
+  - name: Warehouse
+    description: Warehouse operations
+  - name: Routes
+    description: Route optimization
+  - name: Customers
+    description: Customer management
+  - name: Integrations
+    description: MCP integration management
+  - name: Agents
+    description: AI agent management
+  - name: Knowledge
+    description: Knowledge base search
+  - name: Billing
+    description: Billing and payments
+  - name: Organisation
+    description: Team and organisation management
+  - name: Monitoring
+    description: System monitoring and metrics
+  - name: Feature Flags
+    description: Feature flag management
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+                orgName:
+                  type: string
+                companySize:
+                  type: string
+                  enum: [solo, 2-10, 11-30, 31-50, 51-100, 100+]
+      responses:
+        '201':
+          description: Registration successful
+
+  /api/chat:
+    post:
+      tags: [Chat]
+      summary: Send chat message
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                threadId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Chat response
+        '429':
+          description: Rate limited
+
+  /api/chat/stream:
+    post:
+      tags: [Chat]
+      summary: Send chat message (SSE streaming)
+      description: Same as /api/chat but streams response as Server-Sent Events
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                threadId:
+                  type: string
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /api/shipment:
+    get:
+      tags: [Shipments]
+      summary: List shipments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Shipments list
+    post:
+      tags: [Shipments]
+      summary: Create shipment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tracking_number:
+                  type: string
+                carrier:
+                  type: string
+                origin:
+                  type: string
+                destination:
+                  type: string
+                customer_name:
+                  type: string
+      responses:
+        '201':
+          description: Shipment created
+
+  /api/knowledge:
+    get:
+      tags: [Knowledge]
+      summary: Search knowledge base
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search query
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [mcp_tool, domain_entity, business_rule, api_endpoint, integration, workflow, procedure]
+        - name: stats
+          in: query
+          schema:
+            type: boolean
+        - name: discovery
+          in: query
+          schema:
+            type: boolean
+          description: Agent discovery document
+      responses:
+        '200':
+          description: Search results
+
+  /api/knowledge/suggest:
+    get:
+      tags: [Knowledge]
+      summary: Typeahead suggestions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        '200':
+          description: Suggestions
+
+  /api/monitoring/metrics:
+    get:
+      tags: [Monitoring]
+      summary: Get monitoring metrics
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: integer
+            default: 24
+          description: Hours to look back
+        - name: bucket
+          in: query
+          schema:
+            type: integer
+            default: 60
+          description: Bucket size in minutes
+      responses:
+        '200':
+          description: Time-series metrics
+
+  /api/feature-flags:
+    get:
+      tags: [Feature Flags]
+      summary: List all feature flags
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Feature flags
+    post:
+      tags: [Feature Flags]
+      summary: Update a feature flag (super admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key:
+                  type: string
+                enabled:
+                  type: boolean
+                minPlan:
+                  type: string
+                  enum: [free, starter, growth, enterprise]
+      responses:
+        '200':
+          description: Flag updated
+        '403':
+          description: Not authorized
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
