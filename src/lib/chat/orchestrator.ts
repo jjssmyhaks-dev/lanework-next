@@ -7,6 +7,7 @@
  */
 
 import { callMcpAction, listMcpCoverage } from "@/lib/mcp";
+import { getKBAgentContext } from "@/lib/knowledge";
 
 // ── Types ──
 
@@ -399,9 +400,16 @@ export async function orchestrate(
   const toolCalls: ToolCallRecord[] = [];
 
   if (intents.length === 0) {
-    // No specific intent detected — general AI response
+    // No specific intent detected — use knowledge base for context
+    const kbContext = await getKBAgentContext(userMessage);
+    const toolHint = kbContext.toolRecommendations.length > 0
+      ? `\n\n💡 _I can help with: ${kbContext.toolRecommendations.map((r) => r.tool.replace(/_/g, " ")).join(", ")}_`
+      : "";
+    const entityHint = kbContext.mentionedEntities.length > 0
+      ? `\n\n_Related to: ${kbContext.mentionedEntities.join(", ")}_`
+      : "";
     return {
-      reply: "", // Caller should use AI fallback
+      reply: `I can help with that! Could you provide more details? For example, a tracking number, location, or specific item.${toolHint}${entityHint}`,
       toolCalls: [],
       intent: "general",
       requiresAuth: false,

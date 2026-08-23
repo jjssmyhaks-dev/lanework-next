@@ -16,6 +16,7 @@
 | **Autonomous Agents** | Background pollers monitor shipments (5min), inventory (30min), fleet (10min), compliance (daily) |
 | **Self-Learning** | Agents learn from feedback, adjust risk scores, improve accuracy over time |
 | **Team Management** | Multi-tenant orgs with RBAC (Super Admin → Viewer), email invites |
+| **Knowledge Base** | BM25 search + JSON-LD ontology — 50+ entries covering MCPs, domain concepts, business rules |
 | **Indian Pricing** | ₹0/₹999/₹2,999/₹7,999 per month + GST, 75%+ gross margin |
 
 ---
@@ -41,6 +42,7 @@
 │  5 Background Pollers · Workflow Engine           │
 │  Trust System · Approval Queue · Learning Engine  │
 │  Guardrails (input/output/cost/circuit breaker)   │
+│  Knowledge Base (BM25 + JSON-LD ontology)         │
 └──────────────────────┬──────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────┐
@@ -155,7 +157,7 @@ src/
 │   │   ├── billing/         # Billing & invoices
 │   │   ├── terms/           # Terms of Service
 │   │   └── privacy/         # Privacy Policy
-│   ├── api/                 # 60 REST API routes
+│   ├── api/                 # 60+ REST API routes
 │   │   ├── auth/            # Login, Register, Refresh, Forgot/Reset Password
 │   │   ├── chat/            # Chat orchestrator + history
 │   │   ├── agents/          # Agent APIs (cron, alerts, approvals, metrics, harness)
@@ -167,6 +169,7 @@ src/
 │   │   └── ...
 │   ├── agents/              # Agent detail pages (6 agents)
 │   └── page.tsx             # Landing page
+│   ├── knowledge/           # Knowledge base management UI
 ├── components/ui/           # 24 React components
 │   ├── chat/                # Message bubble, tool cards, quick actions
 │   ├── notification-bell.tsx
@@ -182,6 +185,14 @@ src/
 │   │   ├── learning.ts      # Self-learning engine
 │   │   ├── harness.ts       # Agentic harness for continuous eval
 │   │   └── ...
+│   ├── knowledge/           # Knowledge base (BM25 search + JSON-LD ontology)
+│   │   ├── types.ts         # KBEntry, SearchResult, AgentContext, JSON-LD types
+│   │   ├── search.ts        # BM25 search engine (Okapi scoring, Hinglish-aware)
+│   │   ├── mcp-entries.ts   # Knowledge entries for all 15 MCP servers (58 tools)
+│   │   ├── domain-entries.ts # Domain entities, business rules, workflows, procedures
+│   │   ├── ontology.ts      # JSON-LD schema.org ontology for cross-agent interop
+│   │   ├── store.ts         # Central store: search, intent mapping, entity detection
+│   │   └── index.ts
 │   ├── guardrails/          # Input guard, output guard, cost guard, circuit breaker
 │   ├── security/            # Webhook verification, audit events
 │   ├── auth.ts              # JWT auth with refresh tokens
@@ -191,7 +202,7 @@ src/
 │   ├── cache.ts             # In-memory TTL cache
 │   └── ...
 mcp-servers/                 # 15 MCP servers, 58 tools
-test/                        # 5 test files, 52 tests
+test/                        # 7 test files, 69 tests
 loadtest/                    # k6 load test suites
 prisma/                      # Database schema + migrations
 ```
@@ -237,7 +248,7 @@ Dashboard shows improvement trends
 
 | Plan | Price/mo | AI Chats | Shipments | Team | Gross Margin |
 |------|----------|----------|-----------|------|-------------|
-| **Free Trial** | ₹0 | 10/day | 20/mo | 1 | — |
+| **Free Trial** | ₹0 | 10/mo | 20/mo | 1 | — |
 | **Starter** | ₹999 | 200/day | 500/mo | 3 | 97.9% |
 | **Growth** | ₹2,999 | Unlimited | 5,000/mo | 10 | 97.9% |
 | **Enterprise** | ₹7,999 | Unlimited | Unlimited | 50 | 97.3% |
@@ -246,10 +257,45 @@ Dashboard shows improvement trends
 
 ---
 
+## 📚 Knowledge Base
+
+The knowledge base enables the AI chat to understand what it can do and how to do it.
+
+### Structure
+| File | Entries | What it covers |
+|------|---------|---------------|
+| `mcp-entries.ts` | 30+ | All 15 MCP servers — tools, inputs, outputs, modes (live/simulated/fallback) |
+| `domain-entries.ts` | 25+ | Domain entities, business rules, workflows, API routes, procedures |
+| `search.ts` | — | BM25 search engine — Okapi scoring, Hinglish/Devanagari awareness |
+| `ontology.ts` | — | JSON-LD with schema.org types for cross-agent interoperability |
+
+### Key Features
+- **BM25 text search** — Okapi BM25 scoring with Indian-language tokenization (Hinglish, Devanagari)
+- **JSON-LD ontology** — schema.org types for external AI agent discovery
+- **Agent Discovery** — `/api/knowledge?discovery=true` returns a machine-readable capabilities doc
+- **Intent-to-tool mapping** — 30+ keyword patterns map user intents to MCP tools
+- **Entity detection** — 10 regex patterns extract shipment IDs, tracking numbers, PIN codes
+- **Business rule detection** — maps context to applicable pricing/RBAC/workflow rules
+- **Chat integration** — orchestrator uses KB context when no explicit intent is detected
+
+### API Endpoints
+| Endpoint | What it does |
+|----------|-------------|
+| `GET /api/knowledge?q=track+shipment` | Search knowledge base |
+| `GET /api/knowledge?stats=true` | Get entry counts by category |
+| `GET /api/knowledge?discovery=true` | Agent discovery document (machine-readable) |
+| `GET /api/knowledge?graph=true` | Full JSON-LD knowledge graph |
+| `GET /api/knowledge?id=...` | Get specific entry by ID |
+
+### Management UI
+Navigate to `/knowledge` in the dashboard to search, browse by category, and view entry statistics.
+
+---
+
 ## 🧪 Testing
 
 ```bash
-# Unit tests
+# Unit tests (69 tests)
 npx vitest run
 
 # Type checking
@@ -259,6 +305,9 @@ npx tsc --noEmit
 k6 run loadtest/k6-api.js
 k6 run loadtest/k6-login.js
 k6 run loadtest/k6-chat.js
+
+# Load test with Docker
+cd loadtest && docker compose up
 ```
 
 ---

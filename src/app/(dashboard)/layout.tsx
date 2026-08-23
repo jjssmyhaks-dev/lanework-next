@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   MessageSquare, LayoutDashboard, Truck, Package, Route, Warehouse, Users,
   LogOut, Menu, X, Bot, Shield, BookOpen, Plug, ChevronDown, IndianRupee,
-  CreditCard, BarChart3, Settings, AlertTriangle, CheckCircle, Zap
+  CreditCard, BarChart3,  Settings, AlertTriangle, CheckCircle, Zap, BookMarked
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -43,6 +43,7 @@ const agentsNav = [
 
 const settingsNav = [
   { href: "/integrations", label: "Integrations", icon: Plug, minRole: "admin" as const },
+  { href: "/knowledge", label: "Knowledge Base", icon: BookMarked, minRole: "member" as const },
   { href: "/team", label: "Team", icon: Users, minRole: "admin" as const },
   { href: "/pricing", label: "Pricing", icon: IndianRupee, minRole: "admin" as const },
   { href: "/billing", label: "Billing", icon: CreditCard, minRole: "super_admin" as const },
