@@ -6,7 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowRight, ArrowLeft, Loader2, Eye, EyeOff, Building2, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { COMPANY_SIZES, type CompanySize } from "@/lib/org";
+import { COMPANY_SIZES, type CompanySize } from "@/lib/org-types";
 
 const STEPS = { DETAILS: 1, ORG: 2 };
 
