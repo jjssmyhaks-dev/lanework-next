@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, Phone, Mail, AlertCircle } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatCard } from "@/components/ui/stat-card";
+import { useToast } from "@/components/ui/toast";
+import { MessageSquare, Phone, Mail, AlertCircle, Users, ThumbsUp, ThumbsDown, Clock, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Conversation {
   id: string;
@@ -36,79 +41,140 @@ export default function CustomerPage() {
 
   const openCount = conversations.filter(c => c.status === "open").length;
   const escalatedCount = conversations.filter(c => c.status === "escalated").length;
+  const resolvedCount = conversations.filter(c => c.status === "resolved").length;
   const negativeCount = conversations.filter(c => c.sentiment === "negative").length;
 
-  const channelIcons: Record<string, React.ReactNode> = {
-    chat: <MessageSquare className="h-4 w-4" />,
-    email: <Mail className="h-4 w-4" />,
-    voice: <Phone className="h-4 w-4" />,
+  const channelConfig: Record<string, { icon: typeof MessageSquare; label: string; color: string; bg: string }> = {
+    chat: { icon: MessageSquare, label: "Chat", color: "text-blue-600", bg: "bg-blue-50" },
+    email: { icon: Mail, label: "Email", color: "text-purple-600", bg: "bg-purple-50" },
+    voice: { icon: Phone, label: "Voice", color: "text-amber-600", bg: "bg-amber-50" },
   };
-  const sentimentColors: Record<string, string> = {
-    positive: "bg-emerald-100 text-emerald-700",
-    neutral: "bg-blue-100 text-blue-700",
-    negative: "bg-red-100 text-red-700",
+
+  const sentimentConfig: Record<string, { icon: typeof ThumbsUp; label: string; color: string; bg: string }> = {
+    positive: { icon: ThumbsUp, label: "Positive", color: "text-emerald-700", bg: "bg-emerald-100" },
+    neutral: { icon: null as any, label: "Neutral", color: "text-gray-600", bg: "bg-gray-100" },
+    negative: { icon: ThumbsDown, label: "Negative", color: "text-red-700", bg: "bg-red-100" },
+  };
+
+  const statusConfig: Record<string, { color: string; bg: string }> = {
+    open: { color: "text-blue-700", bg: "bg-blue-100" },
+    escalated: { color: "text-red-700", bg: "bg-red-100" },
+    resolved: { color: "text-emerald-700", bg: "bg-emerald-100" },
+  };
+
+  const formatTime = (iso: string) => {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const diffMs = now.getTime() - d.getTime();
+      const diffMin = Math.floor(diffMs / 60000);
+      if (diffMin < 1) return "Just now";
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffH = Math.floor(diffMin / 60);
+      if (diffH < 24) return `${diffH}h ago`;
+      return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    } catch {
+      return "—";
+    }
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Customer Communications</h1>
-        <p className="text-gray-500 mt-1">Automated responses, sentiment tracking, and escalation management</p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Customer Communications"
+        description="Automated responses, sentiment tracking, and escalation management."
+        breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Customers" }]}
+      />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total Conversations" value={conversations.length} icon={Users} color="blue" />
+        <StatCard label="Open" value={openCount} icon={MessageSquare} color="amber" />
+        <StatCard label="Escalated" value={escalatedCount} icon={AlertCircle} color="red" />
+        <StatCard label="Resolved" value={resolvedCount} icon={ThumbsUp} color="emerald" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card><CardContent className="p-4"><p className="text-sm text-gray-500">Total</p><p className="text-2xl font-bold">{conversations.length}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-sm text-gray-500">Open</p><p className="text-2xl font-bold text-blue-600">{openCount}</p></CardContent></Card>
-        <Card className={escalatedCount > 0 ? "border-red-300" : ""}><CardContent className="p-4"><p className="text-sm text-gray-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Escalated</p><p className={`text-2xl font-bold ${escalatedCount > 0 ? "text-red-600" : ""}`}>{escalatedCount}</p></CardContent></Card>
-        <Card className={negativeCount > 0 ? "border-red-300" : ""}><CardContent className="p-4"><p className="text-sm text-gray-500">Negative Sent.</p><p className={`text-2xl font-bold ${negativeCount > 0 ? "text-red-600" : ""}`}>{negativeCount}</p></CardContent></Card>
-      </div>
-
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">{error}</div>}
-
-      {loading ? (
-        <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
-      ) : conversations.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-30" />
-          <p>No conversations yet. Customer interactions will appear here as they come in.</p>
+      {error && (
+        <div className="flex items-center gap-2 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+          {error}
         </div>
+      )}
+
+      {/* Conversations List */}
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-48" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+          ))}
+        </div>
+      ) : conversations.length === 0 ? (
+        <EmptyState
+          icon={<MessageSquare className="h-8 w-8" />}
+          title="No conversations yet"
+          description="Customer interactions will appear here as they come in through chat, email, or voice channels."
+        />
       ) : (
-        <div className="bg-white rounded-lg border">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-gray-50 text-left text-sm text-gray-500">
-                <th className="px-4 py-3 font-medium">Customer</th>
-                <th className="px-4 py-3 font-medium">Channel</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Sentiment</th>
-                <th className="px-4 py-3 font-medium">Last Activity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {conversations.map(conv => (
-                <tr key={conv.id} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium">{conv.customer_name}</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 text-sm text-gray-500">
-                      {channelIcons[conv.channel] || <MessageSquare className="h-4 w-4" />}
-                      {conv.channel}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${conv.status === "open" ? "bg-blue-100 text-blue-700" : conv.status === "escalated" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>{conv.status}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {conv.sentiment ? (
-                      <span className={`inline-flex text-xs px-2 py-0.5 rounded-full font-medium ${sentimentColors[conv.sentiment] || ""}`}>{conv.sentiment}</span>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {conv.last_message_at ? new Date(conv.last_message_at).toLocaleString() : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {conversations.map((conv) => {
+            const channel = channelConfig[conv.channel] || channelConfig.chat;
+            const sentiment = conv.sentiment ? sentimentConfig[conv.sentiment] : null;
+            const status = statusConfig[conv.status] || statusConfig.open;
+            const ChannelIcon = channel.icon;
+
+            return (
+              <Card key={conv.id} className="border border-gray-200 hover:shadow-md transition-all duration-200 group cursor-pointer">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    {/* Avatar */}
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-gray-100 to-gray-200 group-hover:scale-110 transition-transform">
+                      <span className="text-sm font-semibold text-gray-600">
+                        {conv.customer_name?.charAt(0)?.toUpperCase() || "?"}
+                      </span>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900">{conv.customer_name}</span>
+                        <span className={cn("text-xs px-2.5 py-0.5 rounded-full font-medium", status.bg, status.color)}>
+                          {conv.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium", channel.bg, channel.color)}>
+                          <ChannelIcon className="h-3 w-3" />
+                          {channel.label}
+                        </span>
+                        {sentiment && (
+                          <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium", sentiment.bg, sentiment.color)}>
+                            {sentiment.icon && <sentiment.icon className="h-3 w-3" />}
+                            {sentiment.label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Time + Arrow */}
+                    <div className="hidden sm:flex items-center gap-3 text-sm text-gray-500">
+                      <span className="flex items-center gap-1 text-xs">
+                        <Clock className="h-3 w-3" />
+                        {formatTime(conv.last_message_at)}
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

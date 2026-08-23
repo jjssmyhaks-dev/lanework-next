@@ -541,22 +541,22 @@ export default function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white flex-shrink-0">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-[#1a1a2e]">
-            <Bot className="h-4 w-4 text-white" />
+        <header className="flex items-center gap-3 px-4 py-3 border-b border-gray-200/80 bg-white/80 backdrop-blur-sm flex-shrink-0">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#1a1a2e] to-[#2d2d4e] shadow-sm">
+            <Bot className="h-4.5 w-4.5 text-white" />
           </div>
           <div>
-            <h1 className="text-base font-semibold text-[#1a1a2e] leading-tight">Lanework</h1>
-            <p className="text-[10px] text-gray-400">AI logistics command center</p>
+            <h1 className="text-sm font-bold text-[#1a1a2e] leading-tight tracking-tight">Lanework</h1>
+            <p className="text-[10px] text-gray-400 font-medium">AI logistics command center</p>
           </div>
-          <span className="hidden sm:inline-flex items-center gap-1 ml-2 text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full font-medium">
+          <span className="hidden sm:inline-flex items-center gap-1.5 ml-2 text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 rounded-full font-medium border border-emerald-100">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Online
           </span>
-          <div className="ml-auto flex items-center gap-1">
-            <button onClick={handleExport} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="Export conversation">
+          <div className="ml-auto flex items-center gap-1.5">
+            <button onClick={handleExport} className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all" title="Export conversation">
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             </button>
-            <button onClick={clearConversation} className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Clear conversation">
+            <button onClick={clearConversation} className="p-2 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all" title="Clear conversation">
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
@@ -567,23 +567,35 @@ export default function ChatPage() {
           <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
             {/* Empty state */}
             {messages.length <= 1 && !loading && (
-              <div className="text-center py-8">
-                <div className="grid h-16 w-16 place-items-center rounded-2xl bg-[#1a1a2e] mx-auto mb-4">
-                  <Bot className="h-8 w-8 text-white" />
+              <div className="text-center py-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="relative inline-flex mb-6">
+                  <div className="grid h-20 w-20 place-items-center rounded-3xl bg-gradient-to-br from-[#1a1a2e] to-[#2d2d4e] shadow-lg shadow-[#1a1a2e]/20">
+                    <Bot className="h-10 w-10 text-white" />
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full bg-emerald-500 border-2 border-white">
+                    <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                  </div>
                 </div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">What can I help with?</h2>
-                <p className="text-sm text-gray-500 mb-6 max-w-md mx-auto">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  What can I help with?
+                </h2>
+                <p className="text-sm text-gray-500 mb-8 max-w-lg mx-auto leading-relaxed">
                   Track shipments, check inventory, optimize routes, validate GSTINs, upload CSVs, and more — all through natural language.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg mx-auto">
-                  {SUGGESTIONS.map((s) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl mx-auto">
+                  {SUGGESTIONS.map((s, i) => (
                     <button key={s.text} onClick={() => send(s.text)}
-                      className="text-left p-3 rounded-xl border border-gray-200 text-sm text-gray-600 hover:border-gray-400 hover:text-gray-900 transition-all bg-white"
+                      className="text-left p-4 rounded-2xl border border-gray-200 text-sm text-gray-600 hover:border-gray-900 hover:text-gray-900 hover:shadow-md transition-all duration-200 bg-white group"
+                      style={{ animationDelay: `${i * 50}ms` }}
                     >
-                      <span className="mr-2">{s.icon}</span>{s.text}
+                      <span className="text-lg mr-2 group-hover:scale-110 inline-block transition-transform">{s.icon}</span>
+                      <span className="font-medium">{s.text}</span>
                     </button>
                   ))}
                 </div>
+                <p className="text-[10px] text-gray-400 mt-6">
+                  Powered by 15 AI integrations • Real-time data • Enterprise-grade security
+                </p>
               </div>
             )}
 
@@ -769,7 +781,7 @@ export default function ChatPage() {
         )}
 
         {/* Input Area */}
-        <div className="border-t border-gray-200 bg-white flex-shrink-0">
+        <div className="border-t border-gray-200/80 bg-white/80 backdrop-blur-sm flex-shrink-0">
           <div className="max-w-2xl mx-auto px-4 py-3 space-y-2">
             {/* Integration Pills */}
             <IntegrationPills onSelect={handleIntegrationSelect} onConnect={handleIntegrationConnect} />
@@ -818,13 +830,13 @@ export default function ChatPage() {
                 </span>
               </div>
               <button onClick={() => send()} disabled={loading || !input.trim() || !!limitError?.blocked}
-                className={cn("grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white transition-colors",
-                  loading || !input.trim() || limitError?.blocked ? "bg-gray-300 cursor-not-allowed" : "bg-[#1a1a2e] hover:bg-[#1a1a2e]/90"
+                className={cn("grid h-12 w-12 shrink-0 place-items-center rounded-xl text-white transition-all duration-200 shadow-sm",
+                  loading || !input.trim() || limitError?.blocked ? "bg-gray-300 cursor-not-allowed" : "bg-gradient-to-br from-[#1a1a2e] to-[#2d2d4e] hover:shadow-md hover:scale-105"
                 )}
                 aria-label="Send message"
                 title={limitError?.blocked ? "Daily chat limit reached — upgrade to continue" : "Send message"}
               >
-                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-4 w-4" />}
               </button>
             </div>
             <p className="text-[10px] text-gray-400 text-center">

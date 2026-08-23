@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { generateId, cn } from "@/lib/utils";
 import { Users, Plus, Truck, Car, Clock, Shield, AlertTriangle, X, Loader2 } from "lucide-react";
+import { StatCard } from "@/components/ui/stat-card";
 
 interface Driver {
   id: string; name: string; license: string | null; status: string;
@@ -93,42 +94,10 @@ export default function FleetPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border border-gray-200 hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-gray-500">Drivers</span>
-              <Users className="h-4 w-4 text-gray-400" />
-            </div>
-            <AnimatedCounter value={drivers.length} className="text-3xl font-semibold text-gray-900" />
-          </CardContent>
-        </Card>
-        <Card className="border border-gray-200 hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-gray-500">Available</span>
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
-            </div>
-            <AnimatedCounter value={availableDrivers} className="text-3xl font-semibold text-emerald-600" />
-          </CardContent>
-        </Card>
-        <Card className="border border-gray-200 hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-gray-500">Vehicles</span>
-              <Truck className="h-4 w-4 text-gray-400" />
-            </div>
-            <AnimatedCounter value={vehicles.length} className="text-3xl font-semibold text-gray-900" />
-          </CardContent>
-        </Card>
-        <Card className={cn("border hover:shadow-md transition-shadow", driversAtLimit > 0 ? "border-amber-200 bg-amber-50/50" : "border-gray-200")}>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-gray-500">Hours Alert</span>
-              <Clock className={cn("h-4 w-4", driversAtLimit > 0 ? "text-amber-500" : "text-gray-400")} />
-            </div>
-            <AnimatedCounter value={driversAtLimit} className={cn("text-3xl font-semibold", driversAtLimit > 0 ? "text-amber-600" : "text-gray-900")} />
-          </CardContent>
-        </Card>
+        <StatCard label="Drivers" value={drivers.length} icon={Users} color="blue" />
+        <StatCard label="Available" value={availableDrivers} icon={Users} color="emerald" />
+        <StatCard label="Vehicles" value={vehicles.length} icon={Truck} color="purple" />
+        <StatCard label="Hours Alert" value={driversAtLimit} icon={Clock} color={driversAtLimit > 0 ? "amber" : "slate"} />
       </div>
 
       {/* Hours Warning */}

@@ -11,7 +11,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { generateId, cn } from "@/lib/utils";
-import { Package, Plus, TrendingDown, Search, AlertTriangle, ArrowUpDown, X, Loader2 } from "lucide-react";
+import { Package, Plus, TrendingDown, Search, AlertTriangle, ArrowUpDown, X, Loader2, BarChart3 } from "lucide-react";
+import { StatCard } from "@/components/ui/stat-card";
 
 interface InventoryItem {
   id: string; sku: string; name: string; quantity: number;
@@ -90,26 +91,9 @@ export default function InventoryPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border border-gray-200 hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <p className="text-sm text-gray-500 mb-1">Total SKUs</p>
-            <AnimatedCounter value={items.length} className="text-3xl font-semibold text-gray-900" />
-          </CardContent>
-        </Card>
-        <Card className="border border-gray-200 hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <p className="text-sm text-gray-500 mb-1">Total Units</p>
-            <AnimatedCounter value={totalUnits} className="text-3xl font-semibold text-gray-900" />
-          </CardContent>
-        </Card>
-        <Card className={cn("border hover:shadow-md transition-shadow", criticalCount > 0 ? "border-red-200 bg-red-50/50" : "border-gray-200")}>
-          <CardContent className="p-5">
-            <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
-              <TrendingDown className="h-3 w-3" /> Low Stock
-            </p>
-            <AnimatedCounter value={criticalCount} className={cn("text-3xl font-semibold", criticalCount > 0 ? "text-red-600" : "text-gray-900")} />
-          </CardContent>
-        </Card>
+        <StatCard label="Total SKUs" value={items.length} icon={Package} color="blue" />
+        <StatCard label="Total Units" value={totalUnits} icon={BarChart3} color="emerald" />
+        <StatCard label="Low Stock" value={criticalCount} icon={TrendingDown} color={criticalCount > 0 ? "red" : "slate"} />
       </div>
 
       {/* Low Stock Alert */}
