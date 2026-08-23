@@ -77,31 +77,50 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // For API routes, check Authorization header
+  // For API routes, check either Authorization header OR cookie
   if (pathname.startsWith("/api/")) {
     // Skip auth for public API routes
     if (pathname.startsWith("/api/auth/") || pathname.startsWith("/api/webhooks")) {
       return NextResponse.next();
     }
 
+    // Check Authorization header first
     const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
+    if (authHeader?.startsWith("Bearer ")) {
+      try {
+        const token = authHeader.slice(7);
+        await jwtVerify(token, JWT_SECRET);
+        return NextResponse.next();
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid or expired token" },
+          { status: 401 }
+        );
+      }
     }
 
-    try {
-      const token = authHeader.slice(7);
-      await jwtVerify(token, JWT_SECRET);
-      return NextResponse.next();
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid or expired token" },
-        { status: 401 }
-      );
+    // Check cookie-based token (for browser fetch calls)
+    const apiToken =
+      request.cookies.get("auth-token")?.value ||
+      request.cookies.get("lanework-token")?.value ||
+      request.cookies.get("token")?.value;
+
+    if (apiToken) {
+      try {
+        await jwtVerify(apiToken, JWT_SECRET);
+        return NextResponse.next();
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid or expired token" },
+          { status: 401 }
+        );
+      }
     }
+
+    return NextResponse.json(
+      { error: "Authentication required" },
+      { status: 401 }
+    );
   }
 
   // For page routes, check cookie-based token
