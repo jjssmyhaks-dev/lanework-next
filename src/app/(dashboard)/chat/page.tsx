@@ -13,6 +13,7 @@ import QuickActionsBar from "@/components/ui/chat/quick-actions-bar";
 import IntegrationPills from "@/components/ui/chat/integration-pills";
 import KnowledgeSuggestPopover from "@/components/ui/chat/knowledge-suggest-popover";
 import { useKnowledgeSuggest } from "@/components/ui/chat/use-knowledge-suggest";
+import { useChatStream } from "@/components/ui/chat/use-chat-stream";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { UpgradeBanner, UsageProgressBar } from "@/components/ui/upgrade-banner";
 
@@ -367,12 +368,40 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, msg]);
   }, []);
 
+  // ── Streaming State ──
+  const [streamingContent, setStreamingContent] = useState("");
+  const [streamingToolCalls, setStreamingToolCalls] = useState<Array<{ integration: string; action: string; mode: string; durationMs: number }>>([]);
+
+  // ── SSE Stream Hook ──
+  const { send: sendStream, streaming: isStreaming } = useChatStream({
+    onToken: (token) => setStreamingContent((prev) => prev + token),
+    onToolCall: (tc) => setStreamingToolCalls((prev) => [...prev, tc]),
+    onDone: (result) => {
+      // Finalize the streamed message
+      const toolCall = result.toolCalls?.[0];
+      let toolResult: ToolResult | null = null;
+      if (toolCall) {
+        const cardType = getResultCardType(toolCall.action, {});
+        toolResult = { type: cardType, data: { mode: toolCall.mode } };
+      }
+      addMessage({ id: genId(), role: "assistant", content: result.content, timestamp: new Date().toISOString(), toolResult });
+      setStreamingContent("");
+      setStreamingToolCalls([]);
+      if (result.threadId && result.threadId !== activeThreadId) setActiveThreadId(result.threadId);
+      setLoading(false);
+      fetchUsage();
+    },
+    onError: (err) => {
+      setStreamingContent("");
+      setStreamingToolCalls([]);
+      setLoading(false);
+    },
+  });
+
   // ── Send Handler ──
   const send = useCallback(async (text?: string) => {
     const msg = (text || input).trim();
     if (!msg || loading) return;
-
-    // Client-side check: if we know the limit is hit, block immediately
     if (limitError?.blocked) return;
 
     const userMsg: Message = { id: genId(), role: "user", content: msg, timestamp: new Date().toISOString(), toolResult: null };
@@ -381,32 +410,35 @@ export default function ChatPage() {
     setCharCount(0);
     dismissSuggestions();
     setLoading(true);
+    setStreamingContent("");
+    setStreamingToolCalls([]);
 
     try {
-      // Try the orchestrator first (handles MCP tool routing)
-      const orchestratorResult = await callChatOrchestrator(msg);
-
-      if (orchestratorResult && orchestratorResult.reply) {
-        // Orchestrator handled it — show tool calls as rich cards
-        const toolCall = orchestratorResult.toolCalls?.[0];
-        let toolResult: ToolResult | null = null;
-        if (toolCall) {
-          const cardType = getResultCardType(toolCall.action, toolCall.output);
-          toolResult = { type: cardType, data: { ...toolCall.output, mode: toolCall.mode } };
-        }
-        addMessage({ id: genId(), role: "assistant", content: orchestratorResult.reply, timestamp: new Date().toISOString(), toolResult });
-      } else {
-        // General AI fallback
-        const aiResponse = await callAI(msg);
-        addMessage({ id: genId(), role: "assistant", content: aiResponse, timestamp: new Date().toISOString(), toolResult: null });
-      }
+      // Use SSE streaming
+      await sendStream(msg, activeThreadId || undefined);
     } catch {
-      addMessage({ id: genId(), role: "assistant", content: "Something went wrong. Please try again.", timestamp: new Date().toISOString(), toolResult: { type: "error", data: { message: "An unexpected error occurred." } } });
-    } finally {
+      // Fallback to non-streaming if SSE fails
+      try {
+        const orchestratorResult = await callChatOrchestrator(msg);
+        if (orchestratorResult && orchestratorResult.reply) {
+          const toolCall = orchestratorResult.toolCalls?.[0];
+          let toolResult: ToolResult | null = null;
+          if (toolCall) {
+            const cardType = getResultCardType(toolCall.action, toolCall.output);
+            toolResult = { type: cardType, data: { ...toolCall.output, mode: toolCall.mode } };
+          }
+          addMessage({ id: genId(), role: "assistant", content: orchestratorResult.reply, timestamp: new Date().toISOString(), toolResult });
+        } else {
+          const aiResponse = await callAI(msg);
+          addMessage({ id: genId(), role: "assistant", content: aiResponse, timestamp: new Date().toISOString(), toolResult: null });
+        }
+      } catch {
+        addMessage({ id: genId(), role: "assistant", content: "Something went wrong. Please try again.", timestamp: new Date().toISOString(), toolResult: { type: "error", data: { message: "An unexpected error occurred." } } });
+      }
       setLoading(false);
-      fetchUsage(); // refresh usage stats after each message
+      fetchUsage();
     }
-  }, [input, loading, addMessage, activeThreadId, limitError, fetchUsage]);
+  }, [input, loading, addMessage, activeThreadId, limitError, fetchUsage, sendStream, callChatOrchestrator]);
 
   // ── Connection Wizard ──
   const startConnection = (integration: IntegrationSetup) => {
@@ -568,8 +600,40 @@ export default function ChatPage() {
               />
             ))}
 
-            {/* Loading */}
-            {loading && (
+            {/* Streaming Response */}
+            {loading && isStreaming && (
+              <div className="flex gap-3">
+                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#1a1a2e]">
+                  <Bot className="h-4 w-4 text-white" />
+                </div>
+                <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-gray-100 max-w-[80%]">
+                  {/* Tool calls in progress */}
+                  {streamingToolCalls.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-1">
+                      {streamingToolCalls.map((tc, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                          {tc.integration}/{tc.action}
+                          <span className="text-blue-400 text-[10px]">({tc.mode})</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {/* Streaming text */}
+                  {streamingContent ? (
+                    <MessageBubble role="assistant" content={streamingContent} timestamp="" isStreaming />
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "200ms" }} />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "400ms" }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Non-streaming fallback loading */}
+            {loading && !isStreaming && (
               <div className="flex gap-3">
                 <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#1a1a2e]">
                   <Bot className="h-4 w-4 text-white" />
