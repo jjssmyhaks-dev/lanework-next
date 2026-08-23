@@ -364,8 +364,8 @@ export default function KnowledgePage() {
                       </div>
                       <p className="text-sm text-gray-500 line-clamp-2">{entry.description}</p>
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {entry.tags.slice(0, 6).map((tag) => (
-                          <span key={tag} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+                        {entry.tags.slice(0, 6).map((tag, tagIdx) => (
+                          <span key={`${tag}-${tagIdx}`} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
                             {tag}
                           </span>
                         ))}
