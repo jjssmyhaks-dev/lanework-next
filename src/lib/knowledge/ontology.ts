@@ -31,7 +31,7 @@ export function buildKnowledgeGraph(entries: KBEntry[]): KnowledgeGraph {
       "https://schema.org",
       "https://lanework.ai/contexts/logistics/v1",
     ],
-    "@graph": entries.map((entry) => buildSchemaOrgNode(entry)),
+    "@graph": entries.map((entry) => buildSchemaOrgNode(entry)) as KnowledgeGraph["@graph"],
     meta: {
       version: "1.0.0",
       totalEntries: entries.length,

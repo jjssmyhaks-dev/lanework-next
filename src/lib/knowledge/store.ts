@@ -202,6 +202,37 @@ export function getAgentDiscovery() {
 }
 
 /**
+ * Suggest knowledge entries for typeahead.
+ * Optimized for speed — returns compact results with minimal scoring.
+ */
+export function suggestKB(
+  query: string,
+  limit = 6
+): Array<{
+  id: string;
+  title: string;
+  category: KBCategory;
+  subCategory: KBSubCategory;
+  snippet: string;
+  tags: string[];
+}> {
+  if (!query || query.trim().length < 2) return [];
+
+  const results = searchKB({ query, limit, minScore: 0.02 });
+
+  return results.map((r) => ({
+    id: r.entry.id,
+    title: r.entry.title,
+    category: r.entry.category,
+    subCategory: r.entry.subCategory,
+    snippet:
+      r.highlights[0] ||
+      r.entry.description.slice(0, 120) + (r.entry.description.length > 120 ? "…" : ""),
+    tags: r.entry.tags.slice(0, 4),
+  }));
+}
+
+/**
  * Get knowledge stats.
  */
 export function getKBStats() {

@@ -11,6 +11,8 @@ import { INTEGRATION_SETUP, IntegrationSetup } from "@/lib/integration-setup";
 import MessageBubble from "@/components/ui/chat/message-bubble";
 import QuickActionsBar from "@/components/ui/chat/quick-actions-bar";
 import IntegrationPills from "@/components/ui/chat/integration-pills";
+import KnowledgeSuggestPopover from "@/components/ui/chat/knowledge-suggest-popover";
+import { useKnowledgeSuggest } from "@/components/ui/chat/use-knowledge-suggest";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { UpgradeBanner, UsageProgressBar } from "@/components/ui/upgrade-banner";
 
@@ -377,6 +379,7 @@ export default function ChatPage() {
     addMessage(userMsg);
     setInput("");
     setCharCount(0);
+    dismissSuggestions();
     setLoading(true);
 
     try {
@@ -450,8 +453,38 @@ export default function ChatPage() {
   const clearConversation = () => { setMessages([WELCOME_MESSAGE]); localStorage.removeItem(STORAGE_KEY); dismissConnection(); };
 
   // ── Keyboard ──
+  // ── Knowledge Suggest ──
+  const {
+    query: suggestQuery,
+    setQuery: setSuggestQuery,
+    suggestions,
+    loading: suggestLoading,
+    selectedIndex,
+    setSelectedIndex,
+    handleKeyDown: suggestKeyDown,
+    dismiss: dismissSuggestions,
+  } = useKnowledgeSuggest();
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+    // Let the suggest hook handle arrow keys and Tab first
+    if (suggestions.length > 0 && ["ArrowUp", "ArrowDown", "Tab", "Escape"].includes(e.key)) {
+      if (e.key === "Tab" && selectedIndex >= 0) {
+        e.preventDefault();
+        const chosen = suggestions[selectedIndex];
+        setInput(chosen.title);
+        setCharCount(chosen.title.length);
+        dismissSuggestions();
+        inputRef.current?.focus();
+        return;
+      }
+      suggestKeyDown(e);
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      dismissSuggestions();
+      e.preventDefault();
+      send();
+    }
   };
 
   // ── Integration Handlers ──
@@ -697,8 +730,20 @@ export default function ChatPage() {
                 {uploadingFile ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
               </button>
               <div className="flex-1 relative">
+                <KnowledgeSuggestPopover
+                  suggestions={suggestions}
+                  loading={suggestLoading}
+                  selectedIndex={selectedIndex}
+                  onSelect={(s) => {
+                    setInput(s.title);
+                    setCharCount(s.title.length);
+                    dismissSuggestions();
+                    inputRef.current?.focus();
+                  }}
+                  visible={suggestions.length > 0 || suggestLoading}
+                />
                 <textarea ref={inputRef} value={input}
-                  onChange={(e) => { if (e.target.value.length <= MAX_CHARS) { setInput(e.target.value); setCharCount(e.target.value.length); } }}
+                  onChange={(e) => { if (e.target.value.length <= MAX_CHARS) { setInput(e.target.value); setCharCount(e.target.value.length); setSuggestQuery(e.target.value); } }}
                   onKeyDown={handleKeyDown} rows={1}
                   className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-16 text-sm text-gray-700 placeholder:text-gray-400 focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] resize-none min-h-[48px] max-h-[120px]"
                   placeholder="Ask about shipments, inventory, routes, or upload a CSV..."
