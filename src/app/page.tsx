@@ -980,7 +980,7 @@ function FinalCTA() {
           Stop chasing shipments.<br />
           <em className="italic">Start running your operation.</em>
         </h2>
-        <p className="mt-6 text-lg text-[#1a1a2e]/65">Try Lanework free for 14 days — no credit card required.</p>
+        <p className="mt-6 text-lg text-[#1a1a2e]/65">Try Lanework free — no credit card required — no credit card required.</p>
         <div className="mt-8 flex justify-center">
           <a href="/register" className="inline-flex items-center gap-2 rounded-full bg-[#1a1a2e] px-6 py-3 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">
             Start Free <ArrowRight className="h-4 w-4" />
