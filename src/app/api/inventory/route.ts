@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { safeCatch } from "@/lib/catch";
 import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { createInventorySchema, validateBody } from "@/lib/validations";

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Bot, User, ThumbsUp, ThumbsDown, Clock, Copy, Check, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sanitizeHTML } from "@/lib/sanitize";
 import ToolResultCard from "./tool-result-card";
 
 interface MessageBubbleProps {

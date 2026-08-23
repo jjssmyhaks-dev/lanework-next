@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeCatch } from "@/lib/catch";
 import { neon } from "@neondatabase/serverless";
 import { withAuth } from "@/lib/auth";
 import { z } from "zod";
