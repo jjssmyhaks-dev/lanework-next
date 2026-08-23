@@ -20,7 +20,21 @@ export const createShipmentSchema = z.object({
   { message: "tracking_number is required" }
 );
 
-export const updateShipmentSchema = createShipmentSchema.partial();
+export const updateShipmentSchema = z.object({
+  trackingNumber: z.string().min(1).optional(),
+  tracking_number: z.string().min(1).optional(),
+  carrier: z.string().min(1).optional(),
+  origin: z.string().min(1).optional(),
+  destination: z.string().min(1).optional(),
+  eta: z.string().optional(),
+  estimatedDelivery: z.string().optional(),
+  estimated_delivery: z.string().optional(),
+  status: z.enum(["pending", "in_transit", "delivered", "delayed", "out_for_delivery", "rto"]).optional(),
+  customerName: z.string().optional(),
+  customer_name: z.string().optional(),
+  customerPhone: z.string().optional(),
+  customer_phone: z.string().optional(),
+});
 
 // ── Customer ──
 export const createCustomerSchema = z.object({
@@ -34,7 +48,13 @@ export const createCustomerSchema = z.object({
   { message: "name is required" }
 );
 
-export const updateCustomerSchema = createCustomerSchema.partial();
+export const updateCustomerSchema = z.object({
+  name: z.string().min(1).optional(),
+  customerName: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  status: z.enum(["active", "inactive", "blocked"]).optional(),
+});
 
 // ── Inventory ──
 export const createInventorySchema = z.object({
