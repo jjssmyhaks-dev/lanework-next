@@ -81,7 +81,7 @@ export default function RegisterPage() {
             Your logistics<br />operation,<br />
             <span className="italic text-white/50">running itself.</span>
           </h1>
-          <p className="text-lg text-white/50 max-w-md">Start your 14-day free trial. No credit card required.</p>
+          <p className="text-lg text-white/50 max-w-md">Start your Free plan. No credit card required.</p>
         </div>
         <p className="text-sm text-white/30">© {new Date().getFullYear()} Lanework, Inc.</p>
       </div>
@@ -100,7 +100,7 @@ export default function RegisterPage() {
             <>
               <div>
                 <h2 className="text-3xl font-medium tracking-tight text-[#1a1a2e]">Create account</h2>
-                <p className="mt-2 text-[#6b7280]">Start your 14-day free trial. No credit card required.</p>
+                <p className="mt-2 text-[#6b7280]">Start your Free plan. No credit card required.</p>
               </div>
 
               <form onSubmit={handleStep1} className="space-y-4" noValidate>
@@ -187,7 +187,7 @@ export default function RegisterPage() {
                     <span className="font-semibold">💡 Recommended:</span>{" "}
                     Based on your team size ({COMPANY_SIZES.find(s => s.value === companySize)?.members}), we suggest the{" "}
                     <span className="font-bold">
-                      {companySize === "solo" ? "Free Trial" : companySize === "2-10" || companySize === "11-30" ? "Starter (₹999/mo)" : companySize === "31-50" || companySize === "51-100" ? "Growth (₹2,999/mo)" : "Enterprise (₹7,999/mo)"}
+                      {companySize === "solo" ? "Free" : companySize === "2-10" || companySize === "11-30" ? "Starter (₹999/mo)" : companySize === "31-50" || companySize === "51-100" ? "Growth (₹2,999/mo)" : "Enterprise (₹7,999/mo)"}
                     </span>{" "}
                     plan. You can change this anytime.
                   </p>

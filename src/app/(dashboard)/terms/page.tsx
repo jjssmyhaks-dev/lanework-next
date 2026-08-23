@@ -32,7 +32,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-xl font-semibold text-[#1a1a2e] mb-3">4. Subscription Plans</h2>
-            <p>Lanework offers Free Trial, Starter, Growth, and Enterprise plans. All prices are in Indian Rupees (INR) plus applicable GST (18%). You may upgrade or downgrade at any time. Downgrades take effect at the end of the current billing cycle.</p>
+            <p>Lanework offers Free, Starter, Growth, and Enterprise plans. All prices are in Indian Rupees (INR) plus applicable GST (18%). You may upgrade or downgrade at any time. Downgrades take effect at the end of the current billing cycle.</p>
           </section>
 
           <section>

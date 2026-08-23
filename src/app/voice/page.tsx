@@ -20,7 +20,7 @@ export default function VoicePage() {
           <div className="flex items-center gap-3">
             <Link href="/" className="text-sm text-[#1a1a2e]/70 hover:text-[#1a1a2e]">Home</Link>
             <Link href="/voice/register" className="inline-flex items-center gap-1.5 rounded-full bg-[#1a1a2e] px-4 py-2 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">
-              Start Free Trial <ArrowRight className="h-3.5 w-3.5" />
+              Start Free <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>

@@ -117,7 +117,7 @@ export default function BillingPage() {
                 <h2 className="text-lg font-semibold text-[#1a1a2e]">Current Plan</h2>
               </div>
               <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-[#1a1a2e]">{billing?.planName || "Free Trial"}</span>
+                <span className="text-3xl font-bold text-[#1a1a2e]">{billing?.planName || "Free"}</span>
                 {billing && billing.amount > 0 && (
                   <span className="text-sm text-[#1a1a2e]/50">
                     {formatPrice(billing.amount)}/mo · {billing.billingCycle}

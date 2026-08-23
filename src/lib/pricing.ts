@@ -2,7 +2,7 @@
  * Lanework Pricing Model
  *
  * Designed for Indian MSMEs — INR pricing, GST extra, 75%+ gross margin.
- * Plans: Free (7-day trial), Starter (₹999/mo), Growth (₹2,999/mo), Enterprise (₹7,999/mo)
+ * Plans: Free (forever free tier), Starter (₹999/mo), Growth (₹2,999/mo), Enterprise (₹7,999/mo)
  *
  * AI Cost Reference (Cloudflare Workers AI — Llama 3 8B):
  *   Input:  ~$0.011/M tokens → ~₹0.92/M tokens
@@ -81,14 +81,14 @@ export const PLANS: Record<PlanId, {
 }> = {
   free: {
     id: "free",
-    name: "Free Trial",
+    name: "Free",
     nameHi: "मुफ्त ट्रायल",
     priceMonthly: 0,
     priceYearly: 0,
     priceMonthlyPerUser: 0,
     description: "Try Lanework free for 7 days. No credit card needed.",
     descriptionHi: "7 दिन मुफ्त ट्रायल। क्रेडिट कार्ड की जरूरत नहीं।",
-    cta: "Start Free Trial",
+    cta: "Start Free",
     features: {
       chatMessagesPerDay: 10,          // ← Reduced from 25
       maxUsers: 1,
@@ -482,7 +482,7 @@ type CompanySize = "solo" | "2-10" | "11-30" | "31-50" | "51-100" | "100+";
 export function suggestPlan(companySize: CompanySize): { plan: PlanId; reason: string; price: string } {
   switch (companySize) {
     case "solo":
-      return { plan: "free", reason: "Solo operators get full access to core features on the Free Trial", price: "Free" };
+      return { plan: "free", reason: "Solo operators get full access to core features on the Free", price: "Free" };
     case "2-10":
       return { plan: "starter", reason: "Small teams benefit from 3 team members, WhatsApp notifications, and route optimization", price: "₹999/mo" };
     case "11-30":
@@ -494,6 +494,6 @@ export function suggestPlan(companySize: CompanySize): { plan: PlanId; reason: s
     case "100+":
       return { plan: "enterprise", reason: "Enterprise provides unlimited everything, API access, white-label, and dedicated support", price: "₹7,999/mo" };
     default:
-      return { plan: "free", reason: "Start with the Free Trial — no credit card needed", price: "Free" };
+      return { plan: "free", reason: "Start with the Free — no credit card needed", price: "Free" };
   }
 }

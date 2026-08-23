@@ -117,7 +117,7 @@ function Nav() {
             Sign In
           </a>
           <a href="/register" className="inline-flex items-center gap-1.5 rounded-full bg-[#1a1a2e] px-4 py-2 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">
-            Start Free Trial <ArrowRight className="h-3.5 w-3.5" />
+            Start Free <ArrowRight className="h-3.5 w-3.5" />
           </a>
         </div>
       </div>
@@ -398,7 +398,7 @@ function Hero() {
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3 animate-fade-in" style={{ animationDelay: "2.0s", animationFillMode: "both" }}>
           <a href="/register" className="inline-flex items-center gap-2 rounded-full bg-[#1a1a2e] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">
-            Start Free Trial <ArrowRight className="h-4 w-4" />
+            Start Free <ArrowRight className="h-4 w-4" />
           </a>
           <a href="#demo" className="inline-flex items-center gap-2 rounded-full border border-[#1a1a2e]/20 px-5 py-2.5 text-sm font-medium text-[#1a1a2e] hover:bg-[#1a1a2e]/5">
             <Play className="h-3.5 w-3.5" /> Book a Demo
@@ -895,9 +895,9 @@ function DevApi() {
 /* ===== Pricing ===== */
 function Pricing() {
   const tiers = [
-    { name: "Free Trial", price: "₹0", per: "/mo", desc: "10 AI chats/day, 20 shipments/mo, 2 integrations", quota: "No credit card required", cta: "Start Free" },
-    { name: "Starter", price: "₹999", per: "/mo", desc: "200 chats/day, 500 shipments, 5 integrations", quota: "Shiprocket + WhatsApp + Tally + GST + Maps", cta: "Start Free Trial", featured: true },
-    { name: "Growth", price: "₹2,999", per: "/mo", desc: "Unlimited chats, 5K shipments, all 15 integrations", quota: "FedEx, Shopify, Fleet, Compliance, API access", cta: "Start Free Trial" },
+    { name: "Free", price: "₹0", per: "/mo", desc: "10 AI chats/day, 20 shipments/mo, 2 integrations", quota: "No credit card required", cta: "Start Free" },
+    { name: "Starter", price: "₹999", per: "/mo", desc: "200 chats/day, 500 shipments, 5 integrations", quota: "Shiprocket + WhatsApp + Tally + GST + Maps", cta: "Start Free", featured: true },
+    { name: "Growth", price: "₹2,999", per: "/mo", desc: "Unlimited chats, 5K shipments, all 15 integrations", quota: "FedEx, Shopify, Fleet, Compliance, API access", cta: "Start Free" },
     { name: "Enterprise", price: "₹7,999", per: "/mo", desc: "Unlimited everything, ERP, white-label, dedicated support", quota: "SAP B1, custom integrations, SLA", cta: "Talk to Sales" },
   ];
   return (
@@ -921,7 +921,7 @@ function Pricing() {
         ))}
       </div>
       <p className="mt-8 text-center text-sm text-[#1a1a2e]/60">Need more shipments? Overage billed simply per shipment beyond your plan's allowance.</p>
-      <p className="mt-2 text-center text-xs text-[#1a1a2e]/50">14-day free trial, no credit card required. Cancel anytime.</p>
+      <p className="mt-2 text-center text-xs text-[#1a1a2e]/50">Free plan — no credit card required. Cancel anytime.</p>
     </Section>
   );
 }
@@ -974,7 +974,7 @@ function FAQ() {
 /* ===== Final CTA ===== */
 function FinalCTA() {
   return (
-    <section id="trial" className="border-t border-[#e5e7eb]/60" style={{ background: "linear-gradient(180deg, #fafafa 0%, #ffffff 100%)" }}>
+    <section id="pricing" className="border-t border-[#e5e7eb]/60" style={{ background: "linear-gradient(180deg, #fafafa 0%, #ffffff 100%)" }}>
       <div className="mx-auto max-w-4xl px-6 py-32 text-center">
         <h2 className="text-5xl leading-[1.1] text-[#1a1a2e] md:text-6xl">
           Stop chasing shipments.<br />
@@ -983,7 +983,7 @@ function FinalCTA() {
         <p className="mt-6 text-lg text-[#1a1a2e]/65">Try Lanework free for 14 days — no credit card required.</p>
         <div className="mt-8 flex justify-center">
           <a href="/register" className="inline-flex items-center gap-2 rounded-full bg-[#1a1a2e] px-6 py-3 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">
-            Start Free Trial <ArrowRight className="h-4 w-4" />
+            Start Free <ArrowRight className="h-4 w-4" />
           </a>
         </div>
       </div>

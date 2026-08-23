@@ -9,7 +9,7 @@ export default function InventoryManagementPage() {
       <header className="sticky top-0 z-40 border-b border-[#e5e7eb]/60 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2"><div className="grid h-7 w-7 place-items-center rounded-md bg-[#1a1a2e]"><div className="h-3 w-3 rounded-sm bg-[#93c5fd]" style={{transform:"rotate(45deg)"}} /></div><span className="text-lg font-semibold">Lanework</span></Link>
-          <Link href="/register" className="rounded-full bg-[#1a1a2e] px-4 py-2 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">Start Free Trial <ArrowRight className="inline h-3.5 w-3.5 ml-1" /></Link>
+          <Link href="/register" className="rounded-full bg-[#1a1a2e] px-4 py-2 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">Start Free <ArrowRight className="inline h-3.5 w-3.5 ml-1" /></Link>
         </div>
       </header>
       <div className="mx-auto max-w-4xl px-6 py-16">
@@ -30,7 +30,7 @@ export default function InventoryManagementPage() {
 
           <h2 className="text-2xl font-semibold mt-10">Trust &amp; control</h2>
           <div className="flex items-start gap-4 p-5 rounded-xl bg-[#fafafa] border border-[#e5e7eb] mt-4"><Shield className="h-5 w-5 text-[#1a1a2e] mt-0.5 flex-shrink-0" /><div className="text-sm text-[#1a1a2e]/70 leading-relaxed"><span className="font-medium text-[#1a1a2e]">You control the spend threshold.</span> Set a maximum auto-order value. Anything above that requires your explicit approval. All reorder decisions come with a clear reasoning trace showing demand data and lead time calculations.</div></div>
-          <div className="mt-12 flex gap-3"><Link href="/register" className="inline-flex items-center gap-2 rounded-full bg-[#1a1a2e] px-6 py-3 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">Start Free Trial <ArrowRight className="h-4 w-4" /></Link><Link href="/#agents" className="inline-flex items-center gap-2 rounded-full border border-[#1a1a2e]/20 px-6 py-3 text-sm font-medium text-[#1a1a2e] hover:bg-[#1a1a2e]/5">Explore other agents <ArrowRight className="h-4 w-4" /></Link></div>
+          <div className="mt-12 flex gap-3"><Link href="/register" className="inline-flex items-center gap-2 rounded-full bg-[#1a1a2e] px-6 py-3 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">Start Free <ArrowRight className="h-4 w-4" /></Link><Link href="/#agents" className="inline-flex items-center gap-2 rounded-full border border-[#1a1a2e]/20 px-6 py-3 text-sm font-medium text-[#1a1a2e] hover:bg-[#1a1a2e]/5">Explore other agents <ArrowRight className="h-4 w-4" /></Link></div>
         </section>
       </div>
     </main>

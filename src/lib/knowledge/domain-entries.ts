@@ -138,7 +138,7 @@ export const DOMAIN_ENTRIES: KBEntry[] = [
         enterprise: { price: 4999, yearlyPrice: 3999, chatsPerDay: -1, shipmentsPerMonth: -1, users: -1 },
       },
       currency: "INR",
-      trialDays: 14,
+      trialDays: 0,
     },
     planTier: "free",
     updatedAt: "2026-08-22",

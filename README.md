@@ -390,7 +390,7 @@ Real-time system health at `/monitoring`:
 
 | Plan | Price/mo | AI Chats | Shipments | Team | Gross Margin |
 |------|----------|----------|-----------|------|-------------|
-| **Free Trial** | ₹0 | 10/mo | 20/mo | 1 | — |
+| **Free** | ₹0 | 10/mo | 20/mo | 1 | — |
 | **Starter** | ₹999 | 200/day | 500/mo | 3 | 97.9% |
 | **Growth** | ₹2,999 | Unlimited | 5,000/mo | 10 | 97.9% |
 | **Enterprise** | ₹7,999 | Unlimited | Unlimited | 50 | 97.3% |

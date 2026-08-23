@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, ArrowLeft, Check, Building2, CreditCard, Cable, Shield, Rocket, Loader2 } from "lucide-react";
 
 const PLANS = [
-  { id: "starter", name: "Starter", price: "Free trial", desc: "Up to 3 agents, 500 tasks/mo, CSV import" },
-  { id: "growth", name: "Growth", price: "$49/mo after trial", desc: "10 agents, 5K tasks/mo, WhatsApp + TMS integrations" },
+  { id: "starter", name: "Starter", price: "Free", desc: "Up to 3 agents, 500 tasks/mo, CSV import" },
+  { id: "growth", name: "Growth", price: "₹999/mo", desc: "10 agents, 5K tasks/mo, WhatsApp + TMS integrations" },
   { id: "scale", name: "Scale", price: "Custom", desc: "Unlimited agents, API access, dedicated support" },
 ];
 
@@ -131,7 +131,7 @@ export default function OnboardingPage() {
           <>
             <CreditCard className="h-8 w-8 text-[#1a1a2e] mb-3" />
             <h2 className="text-2xl font-semibold text-[#1a1a2e]">Select your plan</h2>
-            <p className="mt-1 text-sm text-[#6b7280]">Start with a free trial. No credit card required.</p>
+            <p className="mt-1 text-sm text-[#6b7280]">Start free — no credit card required.</p>
             <div className="mt-6 space-y-3">
               {PLANS.map(p => (
                 <label key={p.id}

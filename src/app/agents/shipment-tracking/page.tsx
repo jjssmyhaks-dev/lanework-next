@@ -13,7 +13,7 @@ export default function ShipmentTrackingPage() {
             <div className="grid h-7 w-7 place-items-center rounded-md bg-[#1a1a2e]"><div className="h-3 w-3 rounded-sm bg-[#93c5fd]" style={{transform:"rotate(45deg)"}} /></div>
             <span className="text-lg font-semibold">Lanework</span>
           </Link>
-          <Link href="/register" className="rounded-full bg-[#1a1a2e] px-4 py-2 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">Start Free Trial <ArrowRight className="inline h-3.5 w-3.5 ml-1" /></Link>
+          <Link href="/register" className="rounded-full bg-[#1a1a2e] px-4 py-2 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">Start Free <ArrowRight className="inline h-3.5 w-3.5 ml-1" /></Link>
         </div>
       </header>
 
@@ -73,7 +73,7 @@ export default function ShipmentTrackingPage() {
           </div>
 
           <div className="mt-12 flex gap-3">
-            <Link href="/register" className="inline-flex items-center gap-2 rounded-full bg-[#1a1a2e] px-6 py-3 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">Start Free Trial <ArrowRight className="h-4 w-4" /></Link>
+            <Link href="/register" className="inline-flex items-center gap-2 rounded-full bg-[#1a1a2e] px-6 py-3 text-sm font-medium text-white hover:bg-[#1a1a2e]/90">Start Free <ArrowRight className="h-4 w-4" /></Link>
             <Link href="/#agents" className="inline-flex items-center gap-2 rounded-full border border-[#1a1a2e]/20 px-6 py-3 text-sm font-medium text-[#1a1a2e] hover:bg-[#1a1a2e]/5">Explore other agents <ArrowRight className="h-4 w-4" /></Link>
           </div>
         </section>

@@ -10,7 +10,7 @@ export async function GET() {
 
     // User flow tables
     await sql`CREATE TABLE IF NOT EXISTS organizations (id TEXT PRIMARY KEY, name TEXT NOT NULL, owner_id TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
-    await sql`CREATE TABLE IF NOT EXISTS subscriptions (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, plan TEXT DEFAULT 'starter', status TEXT DEFAULT 'trial', trial_start TIMESTAMPTZ DEFAULT NOW(), trial_end TIMESTAMPTZ, payment_method_added BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
+    await sql`CREATE TABLE IF NOT EXISTS subscriptions (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, plan TEXT DEFAULT 'starter', status TEXT DEFAULT 'active', trial_start TIMESTAMPTZ DEFAULT NOW(), trial_end TIMESTAMPTZ, payment_method_added BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
     await sql`CREATE TABLE IF NOT EXISTS agent_trust_configs (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, agent_type TEXT NOT NULL, trust_level TEXT DEFAULT 'propose_only', risk_threshold REAL DEFAULT 0.3, max_auto_value REAL DEFAULT 100, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL, updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
     await sql`CREATE TABLE IF NOT EXISTS approval_actions (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, agent_type TEXT NOT NULL, action_type TEXT NOT NULL, description TEXT, input_data JSONB, status TEXT DEFAULT 'pending', created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;
     await sql`CREATE TABLE IF NOT EXISTS usage_events (id TEXT PRIMARY KEY, org_id TEXT NOT NULL, event_type TEXT NOT NULL, category TEXT, value REAL DEFAULT 1, metadata JSONB, created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL)`;

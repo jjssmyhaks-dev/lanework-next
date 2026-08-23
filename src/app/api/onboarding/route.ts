@@ -32,7 +32,7 @@ export const POST = withAuth(async (request) => {
     if (step === "create-org" && userId && orgName) {
       const id = crypto.randomUUID();
       await sql`INSERT INTO organizations (id, name, owner_id) VALUES (${id}, ${orgName}, ${userId})`;
-      await sql`INSERT INTO subscriptions (id, org_id, plan, status) VALUES (${crypto.randomUUID()}, ${id}, ${plan || 'starter'}, ${'trial'})`;
+      await sql`INSERT INTO subscriptions (id, org_id, plan, status) VALUES (${crypto.randomUUID()}, ${id}, ${plan || 'starter'}, ${'active'})`;
       return NextResponse.json({ success: true, orgId: id, plan: plan || "starter" }, { status: 201 });
     }
 
