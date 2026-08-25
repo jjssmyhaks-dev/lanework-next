@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send, Loader2, Bot, Trash2, Plus, MessageSquare,
   PanelLeftClose, PanelLeftOpen, Paperclip, Upload,
-  AlertCircle, X, CheckCircle2,
+  AlertCircle, X, CheckCircle2, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { INTEGRATION_SETUP, IntegrationSetup } from "@/lib/integration-setup";
@@ -16,6 +16,7 @@ import { useKnowledgeSuggest } from "@/components/ui/chat/use-knowledge-suggest"
 import { useChatStream } from "@/components/ui/chat/use-chat-stream";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { UpgradeBanner, UsageProgressBar } from "@/components/ui/upgrade-banner";
+import AgentActivityPanel from "@/components/ui/chat/agent-activity-panel";
 
 // ── Types ──
 
@@ -237,6 +238,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
   const [threadsLoading, setThreadsLoading] = useState(true);
   const [charCount, setCharCount] = useState(0);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -553,6 +555,12 @@ export default function ChatPage() {
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Online
           </span>
           <div className="ml-auto flex items-center gap-1.5">
+            <button onClick={() => setShowActivity(!showActivity)}
+              className={cn("p-2 rounded-xl transition-all", showActivity ? "bg-[#1a1a2e] text-white" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100")}
+              title="Toggle agent activity feed" aria-label="Toggle agent activity"
+            >
+              <Activity className="h-4 w-4" />
+            </button>
             <button onClick={handleExport} className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all" title="Export conversation">
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             </button>
@@ -845,6 +853,9 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Agent Activity Panel */}
+      {showActivity && <AgentActivityPanel />}
     </div>
     </ErrorBoundary>
   );

@@ -138,11 +138,25 @@ export async function getPollerStatus(): Promise<Array<{
 
 // ── Internal ──
 
+import { acquireToken, releaseToken, checkAgentLimit } from "./agent-limiter";
+
 async function runPoller(poller: PollerConfig): Promise<{
   checked: number;
   alerts: number;
   errors: number;
 }> {
+  // Check rate limit before running
+  const limitCheck = checkAgentLimit(poller.name);
+  if (!limitCheck.allowed) {
+    log.warn({ name: poller.name, waitMs: limitCheck.waitMs, concurrent: limitCheck.concurrent }, "Poller rate limited — skipping");
+    return { checked: 0, alerts: 0, errors: 0 }; // Skip silently
+  }
+
+  if (!acquireToken(poller.name)) {
+    log.warn({ name: poller.name }, "Poller could not acquire token — skipping");
+    return { checked: 0, alerts: 0, errors: 0 };
+  }
+
   log.info({ name: poller.name }, "Poller starting");
 
   // Mark as running
@@ -187,6 +201,8 @@ async function runPoller(poller: PollerConfig): Promise<{
     } catch {
       // Best effort
     }
+  } finally {
+    releaseToken(poller.name);
   }
 
   return result;

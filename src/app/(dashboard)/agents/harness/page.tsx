@@ -44,11 +44,50 @@ const TREND_CONFIG = {
   unknown: { icon: BarChart3, color: "text-gray-400", bg: "bg-gray-50", label: "No data" },
 };
 
+interface CircuitBreaker {
+  integration: string;
+  state: string;
+  failureCount: number;
+  successCount: number;
+  timeUntilRetryMs: number | null;
+}
+
+interface DLQStats {
+  total: number;
+  pending: number;
+  retrying: number;
+  discarded: number;
+  recovered: number;
+  avgAttempts: number;
+}
+
+interface Capability {
+  name: string;
+  description: string;
+  integrations: { name: string; available: boolean }[];
+  trustDefault: string;
+  riskLevel: string;
+  planRequired: string;
+}
+
+const TABS = [
+  { id: "harness", label: "Eval & Tuning", icon: Brain },
+  { id: "circuits", label: "Circuit Breakers", icon: Shield },
+  { id: "dlq", label: "Dead Letters", icon: AlertTriangle },
+  { id: "capabilities", label: "Capabilities", icon: Zap },
+] as const;
+
+type TabId = typeof TABS[number]["id"];
+
 export default function HarnessPage() {
   const [status, setStatus] = useState<HarnessStatus | null>(null);
   const [running, setRunning] = useState(false);
   const [lastResult, setLastResult] = useState<HarnessRun | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>("harness");
+  const [circuits, setCircuits] = useState<CircuitBreaker[]>([]);
+  const [dlqStats, setDlqStats] = useState<DLQStats | null>(null);
+  const [capabilities, setCapabilities] = useState<Capability[]>([]);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -63,6 +102,12 @@ export default function HarnessPage() {
 
   useEffect(() => {
     fetchStatus();
+    // Fetch circuit breaker status
+    fetch("/api/agents/circuit-breaker").then(r => r.ok ? r.json() : null).then(d => { if (d?.circuits) setCircuits(d.circuits); }).catch(() => {});
+    // Fetch DLQ stats
+    fetch("/api/agents/dlq").then(r => r.ok ? r.json() : null).then(d => { if (d?.stats) setDlqStats(d.stats); }).catch(() => {});
+    // Fetch capabilities
+    fetch("/api/agents/capabilities").then(r => r.ok ? r.json() : null).then(d => { if (d?.capabilities) setCapabilities(d.capabilities); }).catch(() => {});
   }, [fetchStatus]);
 
   const runCycle = async () => {
@@ -104,6 +149,28 @@ export default function HarnessPage() {
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             {running ? "Running..." : "Run Harness Cycle"}
           </button>
+        </div>
+
+        {/* Tab Bar */}
+        <div className="flex items-center gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                  activeTab === tab.id
+                    ? "bg-gray-900 text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Status Cards */}
@@ -273,28 +340,126 @@ export default function HarnessPage() {
           </div>
         )}
 
-        {/* How It Works */}
-        <div className="mt-8 bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">How the Harness Works</h3>
-          <div className="grid md:grid-cols-2 gap-4 text-xs text-gray-500 leading-relaxed">
-            <div>
-              <p className="font-medium text-gray-700 mb-1">1. Evaluate</p>
-              <p>Runs the full eval suite (60+ test cases) against all agents, measuring accuracy, latency, and safety.</p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-700 mb-1">2. Learn</p>
-              <p>Analyzes user feedback, approval patterns, and outcomes to extract actionable insights.</p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-700 mb-1">3. Tune</p>
-              <p>Adjusts risk profiles based on historical accuracy. High-confidence patterns are stored for auto-application.</p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-700 mb-1">4. Alert</p>
-              <p>If performance regresses, creates alerts and logs the regression details for human review.</p>
+        {/* Tab Content */}
+        {activeTab === "harness" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">How the Harness Works</h3>
+            <div className="grid md:grid-cols-2 gap-4 text-xs text-gray-500 leading-relaxed">
+              <div>
+                <p className="font-medium text-gray-700 mb-1">1. Evaluate</p>
+                <p>Runs the full eval suite (60+ test cases) against all agents, measuring accuracy, latency, and safety.</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700 mb-1">2. Learn</p>
+                <p>Analyzes user feedback, approval patterns, outcomes, AND rejection reasons to extract actionable insights.</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700 mb-1">3. Tune</p>
+                <p>Adjusts risk profiles based on historical accuracy. Auto-generates new eval cases from production failures.</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-700 mb-1">4. Alert</p>
+                <p>If performance regresses, creates alerts and logs the regression details for human review.</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === "circuits" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Circuit Breakers</h3>
+            {circuits.length === 0 ? (
+              <p className="text-sm text-gray-400">No circuit breaker data yet. Run a harness cycle first.</p>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {circuits.map((c) => (
+                  <div key={c.integration} className="border border-gray-100 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-800 capitalize">{c.integration}</span>
+                      <span className={cn(
+                        "text-xs px-2 py-0.5 rounded-full font-medium",
+                        c.state === "closed" ? "bg-emerald-50 text-emerald-700" :
+                        c.state === "open" ? "bg-red-50 text-red-700" :
+                        "bg-amber-50 text-amber-700"
+                      )}>
+                        {c.state}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 space-y-1">
+                      <p>Failures: {c.failureCount} · Successes: {c.successCount}</p>
+                      {c.timeUntilRetryMs !== null && c.timeUntilRetryMs > 0 && (
+                        <p className="text-amber-600">Retry in {Math.ceil(c.timeUntilRetryMs / 1000)}s</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "dlq" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Dead Letter Queue</h3>
+            {dlqStats ? (
+              <div className="grid md:grid-cols-5 gap-4">
+                {[
+                  { label: "Total", value: dlqStats.total, color: "text-gray-900" },
+                  { label: "Pending", value: dlqStats.pending, color: "text-amber-600" },
+                  { label: "Retrying", value: dlqStats.retrying, color: "text-blue-600" },
+                  { label: "Recovered", value: dlqStats.recovered, color: "text-emerald-600" },
+                  { label: "Discarded", value: dlqStats.discarded, color: "text-gray-400" },
+                ].map((s) => (
+                  <div key={s.label} className="text-center p-4 bg-gray-50 rounded-lg">
+                    <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
+                    <p className="text-xs text-gray-500 mt-1">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">No DLQ data yet.</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === "capabilities" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Agent Capabilities</h3>
+            {capabilities.length === 0 ? (
+              <p className="text-sm text-gray-400">No capability data yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {capabilities.map((cap) => (
+                  <div key={cap.name} className="border border-gray-100 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-800">{cap.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "text-xs px-2 py-0.5 rounded-full font-medium",
+                          cap.riskLevel === "low" ? "bg-emerald-50 text-emerald-700" :
+                          cap.riskLevel === "medium" ? "bg-amber-50 text-amber-700" :
+                          "bg-red-50 text-red-700"
+                        )}>{cap.riskLevel}</span>
+                        <span className="text-xs text-gray-400">{cap.planRequired}+ plan</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-2">{cap.description}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cap.integrations.map((i) => (
+                        <span key={i.name} className={cn(
+                          "text-[10px] px-2 py-0.5 rounded-full",
+                          i.available ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-400"
+                        )}>
+                          {i.available ? "✓" : "○"} {i.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </main>
   );
