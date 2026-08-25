@@ -122,8 +122,25 @@ export async function emitEvent(
   const allHandlers = [...eventHandlers, ...wildcardHandlers];
 
   for (const handler of allHandlers) {
-    handler(event).catch((err) => {
-      log.error({ err, eventType: type, handlerName: handler.name }, "Event handler failed");
+    handler(event).catch(async (err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.error({ err: msg, eventType: type, handlerName: handler.name }, "Event handler failed");
+      // Push to Dead Letter Queue for retry/inspection
+      try {
+        const { pushToDeadLetter } = await import("./dlq");
+        await pushToDeadLetter({
+          eventId: id,
+          eventType: type,
+          source: opts.source || "system",
+          tenantId: opts.tenantId || null,
+          data,
+          error: msg,
+          attempts: 1,
+        });
+      } catch {
+        // DLQ itself failed — log and move on
+        log.error({ eventId: id }, "Failed to push to DLQ");
+      }
     });
   }
 

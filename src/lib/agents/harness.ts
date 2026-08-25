@@ -13,6 +13,7 @@ import { neon } from "@neondatabase/serverless";
 import { runFullEval, runAgentEval, type EvalResult, type EvalSummary } from "@/lib/eval-runner";
 import { runTuningCycle, type TuningResult } from "./auto-tuner";
 import { runLearningCycle, type LearningInsight } from "./learning";
+import { generateAndStoreEvalCases } from "./eval-autogen";
 import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
@@ -141,6 +142,16 @@ export async function runHarnessCycle(): Promise<HarnessRun> {
       current: evalResults.overallAvgScore,
       improvement: evalResults.overallAvgScore - baseline.score,
     }, "Performance improvement detected!");
+  }
+
+  // 9. Auto-generate new eval cases from production failures
+  try {
+    const autoGen = await generateAndStoreEvalCases(7, 5);
+    if (autoGen.generated > 0) {
+      log.info({ generated: autoGen.generated, stored: autoGen.stored, sources: autoGen.sources }, "Auto-generated eval cases from production data");
+    }
+  } catch {
+    // Best effort
   }
 
   log.info({

@@ -12,6 +12,8 @@ import { onEvent, emitEvent, type AgentEvent } from "./events";
 import { evaluateAction } from "./trust";
 import { auditLog } from "./audit-trail";
 import { callMcpAction } from "@/lib/mcp";
+import { recordDecision, recordRejection } from "./memory";
+import { recordPrediction, calculateRawConfidence } from "./confidence";
 import { neon } from "@neondatabase/serverless";
 import { logger } from "@/lib/logger";
 
@@ -133,6 +135,12 @@ export function registerEventHandlers(): void {
         riskScore: trust.risk.score, trustLevel: trust.trustLevel, mode: "rejected",
         durationMs: Date.now() - start, success: true,
       });
+
+      // Record rejection in memory
+      if (event.tenantId) {
+        await recordRejection(event.tenantId, "shipment", trackingNumber as string, "reroute_shipment",
+          `Approval required — risk ${trust.risk.score}/10`, event.data);
+      }
       return;
     }
 
@@ -156,6 +164,19 @@ export function registerEventHandlers(): void {
         riskScore: trust.risk.score, trustLevel: trust.trustLevel, mode: "auto",
         durationMs: Date.now() - start, success: true,
       });
+
+      // Record decision in memory + confidence
+      if (event.tenantId) {
+        await recordDecision(event.tenantId, "shipment", trackingNumber as string, "delay_analysis",
+          { weatherRisk: weather?.overallRisk, autoExecuted: true });
+        const confidence = calculateRawConfidence({
+          actionType: "track_shipment",
+          riskScore: trust.risk.score,
+          contextDataPoints: Object.keys(event.data).length,
+          hasMcpSupport: true,
+        });
+        await recordPrediction({ tenantId: event.tenantId, actionType: "track_shipment", confidence });
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "unknown";
       log.error({ err: msg }, "Failed to handle shipment delay");
