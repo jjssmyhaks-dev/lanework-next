@@ -38,6 +38,53 @@ async function createAlert(
   return id;
 }
 
+// ── Helper: build reasoning chain ──
+
+function buildReasoningChain(
+  event: AgentEvent,
+  actionType: string,
+  riskScore: number,
+  trustLevel: string,
+  context: Record<string, unknown> = {}
+): string {
+  const steps: string[] = [];
+
+  // 1. What triggered this action
+  steps.push(`**Trigger**: Event "${event.eventType}" fired from ${event.source}`);
+  if (event.entityType) steps.push(`  Entity: ${event.entityType} (${event.entityId || "unknown"})`);
+
+  // 2. What data was analyzed
+  const dataKeys = Object.keys(event.data);
+  if (dataKeys.length > 0) {
+    steps.push(`**Data analyzed**: ${dataKeys.join(", ")}`);
+    // Show key values
+    for (const key of dataKeys.slice(0, 5)) {
+      const val = JSON.stringify(event.data[key]);
+      steps.push(`  ${key}: ${val.length > 80 ? val.slice(0, 77) + "..." : val}`);
+    }
+  }
+
+  // 3. Why this specific action
+  steps.push(`**Selected action**: ${actionType.replace(/_/g, " ")}`);
+
+  // 4. Risk assessment
+  steps.push(`**Risk assessment**: Score ${riskScore}/10, trust level: ${trustLevel}`);
+  if (riskScore <= 3) steps.push(`  → Low risk — safe to auto-execute`);
+  else if (riskScore <= 6) steps.push(`  → Medium risk — needs human review`);
+  else steps.push(`  → High risk — definitely needs human approval`);
+
+  // 5. What alternatives were considered
+  const alternatives = Object.entries(context)
+    .filter(([k]) => k !== "action" && k !== "risk")
+    .map(([k, v]) => `  ${k}: ${JSON.stringify(v)}`)
+    .slice(0, 3);
+  if (alternatives.length > 0) {
+    steps.push(`**Alternatives considered**:\n${alternatives.join("\n")}`);
+  }
+
+  return steps.join("\n");
+}
+
 // ── Helper: create approval request ──
 
 async function createApprovalRequest(
@@ -50,12 +97,14 @@ async function createApprovalRequest(
   inputData: Record<string, unknown>
 ): Promise<string> {
   const id = crypto.randomUUID();
+  const reasoning = buildReasoningChain(event, actionType, riskScore, "propose", inputData);
+
   await sql`
     INSERT INTO agent_approvals (id, tenant_id, alert_id, user_id, agent_type, action_type,
                                  action_description, risk_score, input_data, reasoning, status, created_at)
     VALUES (${id}, ${tenantId || null}, NULL, 'system', ${agentType}, ${actionType},
             ${description}, ${riskScore}, ${JSON.stringify(inputData)}::jsonb,
-            'Auto-generated approval request', 'pending', NOW())
+            ${reasoning}, 'pending', NOW())
   `;
   return id;
 }

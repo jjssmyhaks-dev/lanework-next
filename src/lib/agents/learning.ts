@@ -108,7 +108,54 @@ export async function analyzeFeedback(days: number = 30): Promise<LearningInsigh
     }
   }
 
-  // 3. Error clusters (MCP integration failures)
+  // 3. Rejection reason analysis (new)
+  try {
+    const rejectionReasons = await sql`
+      SELECT
+        agent_type,
+        action_type,
+        decision_reason,
+        COUNT(*)::int as count
+      FROM agent_approvals
+      WHERE status = 'rejected'
+        AND decision_reason IS NOT NULL
+        AND decision_reason != ''
+        AND created_at >= NOW() - (${days} || ' days')::interval
+      GROUP BY agent_type, action_type, decision_reason
+      HAVING COUNT(*) >= 2
+      ORDER BY count DESC
+    `;
+
+    // Group by action type to find dominant rejection reasons
+    const byAction = new Map<string, Array<{ reason: string; count: number }>>();
+    for (const row of rejectionReasons) {
+      const key = `${row.agent_type}:${row.action_type}`;
+      if (!byAction.has(key)) byAction.set(key, []);
+      byAction.get(key)!.push({ reason: row.decision_reason, count: row.count });
+    }
+
+    for (const [actionKey, reasons] of byAction) {
+      const [agentType, actionType] = actionKey.split(":");
+      const totalRejections = reasons.reduce((s, r) => s + r.count, 0);
+      const dominantReason = reasons[0];
+
+      if (dominantReason && dominantReason.count / totalRejections > 0.6) {
+        insights.push({
+          type: "approval_pattern",
+          agentType,
+          actionType,
+          description: `Dominant rejection reason for ${actionType}: "${dominantReason.reason}" (${dominantReason.count}/${totalRejections} rejections)`,
+          confidence: Math.min(totalRejections / 10, 1),
+          evidence: { reasons, totalRejections, dominantReason: dominantReason.reason },
+          recommendation: `Update risk profile for ${actionType} based on rejection pattern. Consider: ${dominantReason.reason}.`,
+        });
+      }
+    }
+  } catch {
+    // Best effort
+  }
+
+  // 4. Error clusters (MCP integration failures)
   const errorClusters = await sql`
     SELECT
       integration,

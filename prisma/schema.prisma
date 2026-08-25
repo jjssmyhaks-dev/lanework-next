@@ -822,4 +822,78 @@ model ChatToolCall {
   @@map("chat_tool_calls")
 }
 
+// ═══════════════════════════════════════════
+// Agent Harness Enhancement Tables
+// ═══════════════════════════════════════════
+
+model AgentDeadLetter {
+  id          String   @id @default(uuid())
+  eventId     String   @map("event_id")
+  eventType   String   @map("event_type")
+  source      String
+  tenantId    String?  @map("tenant_id")
+  data        Json     @default("{}")
+  error       String
+  attempts    Int      @default(1)
+  status      String   @default("pending") // pending | retrying | discarded | recovered
+  lastAttemptAt DateTime @default(now()) @map("last_attempt_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, status])
+  @@index([eventType, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Asc)])
+  @@unique([eventId])
+  @@map("agent_dead_letters")
+}
+
+model AgentMemory {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  entityType   String   @map("entity_type")
+  entityId     String   @map("entity_id")
+  memoryType   String   @map("memory_type")
+  key          String
+  value        Json     @default("{}")
+  confidence   Float    @default(1.0)
+  accessCount  Int      @default(0) @map("access_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+  expiresAt    DateTime? @map("expires_at")
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, key])
+  @@index([expiresAt])
+  @@map("agent_memory")
+}
+
+model AgentConfidencePrediction {
+  id          String   @id @default(uuid())
+  tenantId    String?  @map("tenant_id")
+  actionType  String   @map("action_type")
+  confidence  Float
+  wasCorrect  Boolean? @map("was_correct")
+  context     Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, actionType])
+  @@index([actionType, confidence])
+  @@map("agent_confidence_predictions")
+}
+
+model AgentEvalCase {
+  id              String   @id
+  source          String   // production_failure | user_correction | rejected_approval | circuit_trip
+  agent           String
+  scenario        String
+  input           Json     @default("{}")
+  expectedKeywords Json   @map("expected_keywords")
+  minLength       Int      @map("min_length")
+  maxLatencyMs    Int      @map("max_latency_ms")
+  generatedAt     String   @map("generated_at")
+  confidence      Float
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("agent_eval_cases")
+}
+
 // Dashboard stats queried directly via SQL — not managed by Prisma

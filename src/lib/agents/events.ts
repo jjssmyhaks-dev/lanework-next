@@ -101,6 +101,21 @@ export async function emitEvent(
 
   log.info({ eventType: type, source: event.source, entityId: opts.entityId }, "Event emitted");
 
+  // Broadcast to SSE subscribers
+  try {
+    const { broadcastAgentEvent } = await import("@/app/api/agents/stream/route");
+    broadcastAgentEvent({
+      id,
+      eventType: type,
+      tenantId: opts.tenantId,
+      data,
+      source: opts.source || "system",
+      timestamp: now.toISOString(),
+    });
+  } catch {
+    // SSE module not available (e.g., during build) — ignore
+  }
+
   // Dispatch to handlers (non-blocking, catch errors per handler)
   const eventHandlers = handlers.get(type) || [];
   const wildcardHandlers = handlers.get("*" as AgentEventType) || [];

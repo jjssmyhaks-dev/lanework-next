@@ -5,6 +5,7 @@
 
 import { registerPoller, startScheduler } from "./scheduler";
 import { registerEventHandlers } from "./event-actions";
+import { registerCrossAgentPropagation } from "./cross-agent";
 import { pollShipments } from "./pollers/shipment-poller";
 import { pollInventory } from "./pollers/inventory-poller";
 import { pollFleet } from "./pollers/fleet-poller";
@@ -26,6 +27,9 @@ export function initAgentSystem(): void {
 
   // Register event handlers
   registerEventHandlers();
+
+  // Register cross-agent propagation
+  registerCrossAgentPropagation();
 
   // Register pollers with schedules
   registerPoller("shipment-poller", "*/5 * * * *", pollShipments);       // Every 5 min

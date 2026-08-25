@@ -243,19 +243,63 @@ const REGISTRY: Record<string, { create: () => any; actions: Record<string, Tool
   },
 };
 
+import { checkCircuit, recordSuccess, recordFailure, type CircuitState } from "@/lib/agents/circuit-breaker";
+
 /**
  * Attempt to run an integration action through the MCP servers.
  * Returns null when the integration or action isn't covered by an MCP server
  * (the caller should fall back to its inline logic).
+ *
+ * Options:
+ * - dryRun: if true, returns what WOULD happen without executing
+ * - skipCircuitBreaker: if true, bypasses circuit breaker (for testing)
  */
 export async function callMcpAction(
   type: string,
   action: string,
-  payload: Record<string, any> = {}
+  payload: Record<string, any> = {},
+  options: { dryRun?: boolean; skipCircuitBreaker?: boolean } = {}
 ): Promise<Record<string, any> | null> {
   const entry = REGISTRY[type];
   const invoker = entry?.actions?.[action];
   if (!entry || !invoker) return null;
+
+  // ── Dry run mode ──
+  if (options.dryRun) {
+    return {
+      success: true,
+      mode: "dry_run",
+      message: `[DRY RUN] Would execute ${action} on ${type} with payload: ${JSON.stringify(payload).slice(0, 200)}`,
+      integration: type,
+      action,
+      payload,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  // ── Circuit breaker check ──
+  if (!options.skipCircuitBreaker) {
+    const circuit = checkCircuit(type);
+    if (!circuit.allowed) {
+      return {
+        success: false,
+        mode: "circuit_open",
+        message: `${type} is temporarily unavailable (${circuit.reason}). Try again shortly.`,
+        integration: type,
+        action,
+        circuitState: circuit.state,
+      };
+    }
+  }
+
+  // ── Check tool availability (env vars) ──
+  const envKey = `${type.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_API_KEY`;
+  const isConfigured = process.env[envKey] || process.env[type.toUpperCase() + "_API_KEY"];
+  if (!isConfigured && type !== "scanner" && type !== "dockscheduler") {
+    // Still try to init — some MCP servers work without API keys (simulation mode)
+    // But log a warning
+    console.warn(`[MCP:${type}] No API key found for ${envKey} — will use simulation mode`);
+  }
 
   let mcp: any;
   try {
@@ -263,6 +307,7 @@ export async function callMcpAction(
     await mcp.init();
   } catch (e: any) {
     console.error(`[MCP:${type}] init failed:`, e);
+    if (!options.skipCircuitBreaker) recordFailure(type);
     return {
       success: true,
       mode: "simulated",
@@ -273,9 +318,11 @@ export async function callMcpAction(
   try {
     const result = await invoker(mcp, payload || {});
     const mode = typeof result?.mode === "string" ? result.mode : "simulated";
+    if (!options.skipCircuitBreaker) recordSuccess(type);
     return { success: true, mode, ...result, source: `mcp:${type}` };
   } catch (e: any) {
     console.error(`[MCP:${type}] action ${action} failed:`, e);
+    if (!options.skipCircuitBreaker) recordFailure(type);
     return {
       success: true,
       mode: "simulated",
