@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 import { GlobalSearch } from "@/components/ui/global-search";
 import { NotificationBell } from "@/components/ui/notification-bell";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import CommandPalette from "@/components/ui/command-palette";
 import MobileNav from "@/components/ui/mobile-nav";
 import { ToastProvider } from "@/components/ui/toast";
 
@@ -109,6 +110,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <ToastProvider>
+        <CommandPalette />
         {/* Skip to content — accessibility */}
         <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:bg-[#1a1a2e] focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">
           Skip to main content

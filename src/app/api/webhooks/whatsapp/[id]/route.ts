@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
+
+const log = logger.child({ module: "whatsapp-webhook" });
 
 /**
  * WhatsApp Webhook Receiver
@@ -30,7 +33,7 @@ export async function POST(
           }
           if (change.field === "message_template_status_update") {
             // Template message status updates
-            console.log(`[WhatsApp] Template status update:`, change.value);
+            log.info({ change: change.value }, "WhatsApp template status update");
           }
         }
       }
@@ -39,7 +42,7 @@ export async function POST(
     // Check for status updates (message delivery, read receipts)
     if (body.statuses) {
       for (const status of body.statuses) {
-        console.log(`[WhatsApp] Message ${status.id} status: ${status.status}`);
+        log.info({ messageId: status.id, status: status.status }, "WhatsApp message status");
       }
     }
 
