@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Brain, RefreshCw, TrendingUp, TrendingDown, Minus, AlertTriangle,
-  CheckCircle2, Play, Loader2, BarChart3, Zap, Shield
+  CheckCircle2, Play, Loader2, BarChart3, Zap, Shield, Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -70,10 +70,59 @@ interface Capability {
   planRequired: string;
 }
 
+interface ConfidenceStats {
+  totalPredictions: number;
+  avgConfidence: number;
+  calibrationError: number;
+  lowConfidenceCount: number;
+  highConfidenceCount: number;
+}
+
+interface ActionCalibration {
+  actionType: string;
+  sampleSize: number;
+  avgConfidence: number;
+  actualAccuracy: number | null;
+  calibrationError: number | null;
+}
+
+interface AgentMemory {
+  id: string;
+  entityType: string;
+  entityId: string;
+  memoryType: string;
+  key: string;
+  value: Record<string, unknown>;
+  confidence: number;
+  accessCount: number;
+  createdAt: string;
+}
+
+interface AgentLimitStatus {
+  agentType: string;
+  tokens: number;
+  maxTokens: number;
+  concurrent: number;
+  maxConcurrent: number;
+}
+
+interface EvalCase {
+  id: string;
+  source: string;
+  agent: string;
+  scenario: string;
+  confidence: number;
+  createdAt: string;
+}
+
 const TABS = [
   { id: "harness", label: "Eval & Tuning", icon: Brain },
   { id: "circuits", label: "Circuit Breakers", icon: Shield },
   { id: "dlq", label: "Dead Letters", icon: AlertTriangle },
+  { id: "confidence", label: "Confidence", icon: BarChart3 },
+  { id: "memory", label: "Memory", icon: Zap },
+  { id: "limits", label: "Rate Limits", icon: Activity },
+  { id: "autogen", label: "Eval Cases", icon: RefreshCw },
   { id: "capabilities", label: "Capabilities", icon: Zap },
 ] as const;
 
@@ -88,6 +137,11 @@ export default function HarnessPage() {
   const [circuits, setCircuits] = useState<CircuitBreaker[]>([]);
   const [dlqStats, setDlqStats] = useState<DLQStats | null>(null);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
+  const [confidenceStats, setConfidenceStats] = useState<ConfidenceStats | null>(null);
+  const [actionCalibration, setActionCalibration] = useState<ActionCalibration[]>([]);
+  const [memories, setMemories] = useState<AgentMemory[]>([]);
+  const [agentLimits, setAgentLimits] = useState<AgentLimitStatus[]>([]);
+  const [evalCases, setEvalCases] = useState<EvalCase[]>([]);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -108,6 +162,23 @@ export default function HarnessPage() {
     fetch("/api/agents/dlq").then(r => r.ok ? r.json() : null).then(d => { if (d?.stats) setDlqStats(d.stats); }).catch(() => {});
     // Fetch capabilities
     fetch("/api/agents/capabilities").then(r => r.ok ? r.json() : null).then(d => { if (d?.capabilities) setCapabilities(d.capabilities); }).catch(() => {});
+    // Fetch confidence calibration
+    fetch("/api/agents/confidence").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.stats) setConfidenceStats(d.stats);
+      if (d?.actionCalibration) setActionCalibration(d.actionCalibration);
+    }).catch(() => {});
+    // Fetch memories (need a default tenant)
+    fetch("/api/agents/memory?limit=20").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.memories) setMemories(d.memories);
+    }).catch(() => {});
+    // Fetch rate limiter status
+    fetch("/api/agents/poller-status").then(r => r.ok ? r.json() : null).then(d => {
+      if (Array.isArray(d)) setAgentLimits(d.map((p: any) => ({ agentType: p.name, tokens: p.itemsChecked || 0, maxTokens: 20, concurrent: 0, maxConcurrent: 2 })));
+    }).catch(() => {});
+    // Fetch generated eval cases
+    fetch("/api/agents/eval-autogen?limit=20").then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.cases) setEvalCases(d.cases);
+    }).catch(() => {});
   }, [fetchStatus]);
 
   const runCycle = async () => {
@@ -454,6 +525,155 @@ export default function HarnessPage() {
                         </span>
                       ))}
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "confidence" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Confidence Calibration</h3>
+            {confidenceStats ? (
+              <div className="space-y-6">
+                <div className="grid md:grid-cols-5 gap-4">
+                  {[
+                    { label: "Total Predictions", value: confidenceStats.totalPredictions, color: "text-gray-900" },
+                    { label: "Avg Confidence", value: `${Math.round(confidenceStats.avgConfidence * 100)}%`, color: "text-blue-600" },
+                    { label: "Calibration Error", value: `${Math.round(confidenceStats.calibrationError * 100)}%`, color: confidenceStats.calibrationError > 0.2 ? "text-red-600" : "text-emerald-600" },
+                    { label: "Low Confidence", value: confidenceStats.lowConfidenceCount, color: "text-amber-600" },
+                    { label: "High Confidence", value: confidenceStats.highConfidenceCount, color: "text-emerald-600" },
+                  ].map((s) => (
+                    <div key={s.label} className="text-center p-4 bg-gray-50 rounded-lg">
+                      <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
+                      <p className="text-xs text-gray-500 mt-1">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                {actionCalibration.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-gray-700 mb-3">Per-Action Calibration</h4>
+                    <div className="space-y-2">
+                      {actionCalibration.map((a) => (
+                        <div key={a.actionType} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                          <span className="text-xs font-medium text-gray-800 w-40 truncate">{a.actionType}</span>
+                          <div className="flex-1">
+                            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.round((a.actualAccuracy ?? 0) * 100)}%` }} />
+                            </div>
+                          </div>
+                          <span className="text-xs text-gray-500 w-20 text-right">{(a.actualAccuracy ?? 0) > 0 ? `${Math.round((a.actualAccuracy ?? 0) * 100)}% accuracy` : "No data"}</span>
+                          <span className="text-[10px] text-gray-400 w-16 text-right">n={a.sampleSize}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">No confidence data yet. Agents need to make predictions first.</p>
+            )}
+          </div>
+        )}
+
+        {activeTab === "memory" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Agent Memory</h3>
+            {memories.length === 0 ? (
+              <p className="text-sm text-gray-400">No memories stored yet. Agents will learn as they execute actions.</p>
+            ) : (
+              <div className="space-y-2">
+                {memories.map((m) => (
+                  <div key={m.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                    <span className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                      m.memoryType === "decision" ? "bg-blue-50 text-blue-700" :
+                      m.memoryType === "rejection" ? "bg-red-50 text-red-700" :
+                      m.memoryType === "preference" ? "bg-purple-50 text-purple-700" :
+                      m.memoryType === "context" ? "bg-amber-50 text-amber-700" :
+                      "bg-gray-100 text-gray-600"
+                    )}>
+                      {m.memoryType}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">{m.entityType}:{m.entityId}</p>
+                      <p className="text-[10px] text-gray-500 truncate">{m.key}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">Conf: {Math.round(m.confidence * 100)}%</p>
+                      <p className="text-[10px] text-gray-400">Used {m.accessCount}×</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "limits" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Agent Rate Limits</h3>
+            {agentLimits.length === 0 ? (
+              <p className="text-sm text-gray-400">No rate limit data yet.</p>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {agentLimits.map((l) => (
+                  <div key={l.agentType} className="border border-gray-100 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-800 capitalize">{l.agentType}</span>
+                      <span className="text-xs text-gray-400">{l.concurrent}/{l.maxConcurrent} running</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+                      <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.round((l.tokens / l.maxTokens) * 100)}%` }} />
+                    </div>
+                    <p className="text-[10px] text-gray-400">{l.tokens}/{l.maxTokens} tokens available</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "autogen" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Auto-Generated Eval Cases</h3>
+              <button
+                onClick={async () => {
+                  const res = await fetch("/api/agents/eval-autogen", { method: "POST" });
+                  if (res.ok) {
+                    const d = await res.json();
+                    alert(`Generated ${d.generated} cases, stored ${d.stored}`);
+                    const updated = await fetch("/api/agents/eval-autogen?limit=20");
+                    if (updated.ok) { const data = await updated.json(); if (data?.cases) setEvalCases(data.cases); }
+                  }
+                }}
+                className="text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                Generate Cases
+              </button>
+            </div>
+            {evalCases.length === 0 ? (
+              <p className="text-sm text-gray-400">No auto-generated eval cases yet. Click "Generate Cases" to create from production data.</p>
+            ) : (
+              <div className="space-y-2">
+                {evalCases.map((c) => (
+                  <div key={c.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                    <span className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                      c.source === "production_failure" ? "bg-red-50 text-red-700" :
+                      c.source === "user_correction" ? "bg-amber-50 text-amber-700" :
+                      c.source === "rejected_approval" ? "bg-purple-50 text-purple-700" :
+                      "bg-gray-100 text-gray-600"
+                    )}>
+                      {c.source}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">{c.scenario}</p>
+                      <p className="text-[10px] text-gray-500">Agent: {c.agent}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">Conf: {Math.round(c.confidence * 100)}%</span>
                   </div>
                 ))}
               </div>

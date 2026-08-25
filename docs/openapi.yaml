@@ -310,6 +310,104 @@ paths:
         '403':
           description: Not authorized
 
+  /api/agents/health:
+    get:
+      summary: Agent system health check
+      tags: [Agents]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, unhealthy]
+                  latencyMs:
+                    type: integer
+                  checks:
+                    type: object
+
+  /api/agents/confidence:
+    get:
+      summary: Confidence calibration stats
+      tags: [Agents]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Calibration stats and per-action breakdown
+
+  /api/agents/memory:
+    get:
+      summary: Query agent memories
+      tags: [Agents]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Memory entries
+    post:
+      summary: Store memory or preference
+      tags: [Agents]
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [store_preference, get_preference, store_memory]
+                tenantId:
+                  type: string
+                key:
+                  type: string
+                value:
+                  type: object
+      responses:
+        '200':
+          description: Success
+
+  /api/agents/eval-autogen:
+    get:
+      summary: List auto-generated eval cases
+      tags: [Agents]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Generated eval cases
+    post:
+      summary: Trigger eval case generation from production data
+      tags: [Agents]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Generation result
+
 components:
   securitySchemes:
     bearerAuth:

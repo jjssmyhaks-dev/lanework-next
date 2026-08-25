@@ -303,19 +303,50 @@ prisma/                      # Database schema + 2 migrations
 | **Auto (Low Risk)** | Agent auto-executes actions with risk score < 0.3 |
 | **Full Auto** | Agent executes everything, human reviews weekly |
 
+### Agent Harness (Production-Grade)
+
+The agent harness is a 3-phase system for making agents autonomous and self-improving:
+
+**Phase 1 — Production Hardening:**
+| Module | What it does |
+|--------|---------------|
+| Circuit Breaker | Per-MCP integration failure detection (CLOSED→OPEN→HALF_OPEN) |
+| Dead Letter Queue | Failed events stored for retry/inspect/discard |
+| Agent Memory | Per-tenant decisions, rejections, preferences, context |
+| Approval Escalation | Auto-reject after 24h, escalate critical after 1h |
+| Reasoning Chain | Every approval includes why this action was chosen |
+| Dry Run Mode | Preview MCP actions before executing |
+| SSE Streaming | Real-time agent activity in chat UI |
+
+**Phase 2 — Trust & Learning:**
+| Module | What it does |
+|--------|---------------|
+| Confidence Calibration | Agents know when they're unsure (EMA-blended accuracy) |
+| Rejection Learning | Capture rejection reasons, update risk profiles |
+| Event Replay | Re-process events after bug fixes |
+| Tool Availability | Fail fast on missing API keys |
+| Rate Limiting | Per-agent token bucket (no resource monopolization) |
+
+**Phase 3 — Coordination:**
+| Module | What it does |
+|--------|---------------|
+| Cross-Agent Propagation | Shipment delay → fleet agent notified |
+| Capability Declaration | What each agent can/can't do, plan-tier enforcement |
+| Eval Auto-Generation | New test cases from production failures and user corrections |
+
 ### Self-Learning Loop
 ```
 User Feedback (thumbs up/down)
     ↓
-Learning Engine analyzes patterns
+Learning Engine analyzes patterns + rejection reasons
     ↓
-Adaptive Risk adjusts scores
+Adaptive Risk adjusts scores based on actual accuracy
     ↓
 Auto-Tuner applies high-confidence changes
     ↓
-Harness detects regressions
+Harness detects regressions + auto-generates eval cases
     ↓
-Dashboard shows improvement trends
+Dashboard shows improvement trends + confidence calibration
 ```
 
 ---
