@@ -1,119 +1,80 @@
+/**
+ * MobileNav — Bottom navigation bar for mobile devices.
+ *
+ * Shows on screens < 768px (md breakpoint).
+ * Fixed to bottom, glass-morphism style, 5 primary navigation items.
+ * Hidden on desktop (the sidebar handles navigation there).
+ */
+
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import {
-  Menu, X, LayoutDashboard, MessageSquare, Truck, Package,
-  Route, Warehouse, Users, Plug, Bot, Shield, BarChart3,
-  Bell, Settings, IndianRupee, CreditCard, BookMarked, Flag,
-  Activity, AlertTriangle, CheckCircle, Zap,
+  MessageSquare,
+  LayoutDashboard,
+  Package,
+  Truck,
+  Bot,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/chat", label: "AI Chat", icon: MessageSquare },
-  { href: "/shipment", label: "Shipments", icon: Truck },
-  { href: "/inventory", label: "Inventory", icon: Package },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+  { href: "/shipment", label: "Shipments", icon: Package },
   { href: "/fleet", label: "Fleet", icon: Truck },
-  { href: "/warehouse", label: "Warehouse", icon: Warehouse },
-  { href: "/routes", label: "Routes", icon: Route },
-  { href: "/integrations", label: "Integrations", icon: Plug },
-  { href: "/agents", label: "AI Agents", icon: Bot },
-  { href: "/alerts", label: "Alerts", icon: AlertTriangle },
-  { href: "/team", label: "Team", icon: Users },
-  { href: "/knowledge", label: "Knowledge Base", icon: BookMarked },
-  { href: "/monitoring", label: "Monitoring", icon: Activity },
-  { href: "/feature-flags", label: "Feature Flags", icon: Flag },
-  { href: "/pricing", label: "Pricing", icon: IndianRupee },
-  { href: "/billing", label: "Billing", icon: CreditCard },
+  { href: "/agents", label: "Agents", icon: Bot },
 ];
 
 export default function MobileNav() {
-  const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Close on route change
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
-  // Close on Escape
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    if (open) {
-      document.addEventListener("keydown", handleKey);
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      document.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = "";
-    };
-  }, [open]);
-
   return (
-    <>
-      {/* Hamburger button — visible only on mobile */}
-      <button
-        onClick={() => setOpen(!open)}
-        className="lg:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-white border border-gray-200 shadow-sm"
-        aria-label={open ? "Close menu" : "Open menu"}
-        aria-expanded={open}
-      >
-        {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-      </button>
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 md:hidden border-t border-gray-200/80 bg-white/90 backdrop-blur-xl safe-area-bottom"
+      aria-label="Mobile navigation"
+    >
+      <div className="flex items-center justify-around px-2 py-1.5">
+        {NAV_ITEMS.map((item) => {
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
-      {/* Backdrop */}
-      {open && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
-          onClick={() => setOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Slide-out panel */}
-      <div
-        className={cn(
-          "lg:hidden fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-xl transform transition-transform duration-200 ease-out",
-          open ? "translate-x-0" : "-translate-x-full"
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Navigation menu"
-      >
-        <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-200">
-          <div className="w-8 h-8 bg-[#1a1a2e] rounded-lg flex items-center justify-center">
-            <div className="w-3.5 h-3.5 bg-white rounded-sm rotate-45" />
-          </div>
-          <span className="font-bold text-[#1a1a2e]">Lanework</span>
-        </div>
-
-        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1" role="navigation">
-          {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200 min-w-[56px]",
+                isActive
+                  ? "text-[#1a1a2e] bg-gray-100/80"
+                  : "text-gray-400 hover:text-gray-700"
+              )}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <item.icon
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-[#1a1a2e] text-white"
-                    : "text-gray-600 hover:bg-gray-100"
+                  "h-5 w-5 transition-transform",
+                  isActive && "scale-110"
                 )}
-                aria-current={isActive ? "page" : undefined}
+              />
+              <span
+                className={cn(
+                  "text-[10px] font-medium leading-none",
+                  isActive && "font-bold"
+                )}
               >
-                <item.icon className="h-4 w-4 shrink-0" />
                 {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+              </span>
+              {isActive && (
+                <div className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-0.5 bg-[#1a1a2e] rounded-full" />
+              )}
+            </Link>
+          );
+        })}
       </div>
-    </>
+    </nav>
   );
 }

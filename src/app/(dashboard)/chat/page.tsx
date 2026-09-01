@@ -15,6 +15,7 @@ import KnowledgeSuggestPopover from "@/components/ui/chat/knowledge-suggest-popo
 import { useKnowledgeSuggest } from "@/components/ui/chat/use-knowledge-suggest";
 import { useAIChat } from "@/components/ui/chat/use-ai-chat";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import VoiceInput from "@/components/ui/chat/voice-input";
 import { UpgradeBanner, UsageProgressBar } from "@/components/ui/upgrade-banner";
 import AgentActivityPanel from "@/components/ui/chat/agent-activity-panel";
 
@@ -799,8 +800,7 @@ export default function ChatPage() {
                 plan={usageStats.planName}
               />
             )}
-            {/* Text Input + File Upload */}
-            <div className="flex items-end gap-2">
+            {/* Text Input + File Upload */}              <div className="flex items-end gap-2">
               <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" />
               <button onClick={() => fileInputRef.current?.click()} disabled={uploadingFile}
                 className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-colors disabled:opacity-50"
@@ -808,6 +808,10 @@ export default function ChatPage() {
               >
                 {uploadingFile ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
               </button>
+              <VoiceInput
+                onTranscript={(text) => { setInput(text); setTimeout(() => send(text), 100); }}
+                disabled={loading}
+              />
               <div className="flex-1 relative">
                 <KnowledgeSuggestPopover
                   suggestions={suggestions}
