@@ -820,7 +820,7 @@ function LiveChat() {
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Ask something... e.g. 'Where is order 4521?'"
+            aria-label="Search or ask a question" placeholder="Ask something... e.g. 'Where is order 4521?'"
             className="flex-1 rounded-xl border border-[#e5e7eb] bg-white px-4 py-2.5 text-sm placeholder:text-[#d1d5db] focus:outline-none focus:border-[#1a1a2e]"
           />
           <button type="submit" disabled={loading || !input.trim()}

@@ -65,7 +65,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-[#1a1a2e] mb-1.5">Email</label>
-              <input id="email" type="email" {...register("email")}
+              <input id="email" type="email" aria-label="Email address" {...register("email")}
                 className="w-full rounded-lg border border-[#d1d5db] px-4 py-3 text-[#1a1a2e] placeholder:text-[#9ca3af] focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] transition"
                 placeholder="you@company.com" />
               {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
@@ -74,7 +74,7 @@ export default function LoginPage() {
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-[#1a1a2e] mb-1.5">Password</label>
               <div className="relative">
-                <input id="password" type={showPassword ? "text" : "password"} {...register("password")}
+                <input id="password" type={showPassword ? "text" : "password"} aria-label="Password" {...register("password")}
                   className="w-full rounded-lg border border-[#d1d5db] px-4 py-3 pr-12 text-[#1a1a2e] placeholder:text-[#9ca3af] focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] transition"
                   placeholder="••••••••" />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#1a1a2e]">

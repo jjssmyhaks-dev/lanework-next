@@ -829,8 +829,7 @@ export default function ChatPage() {
                   onChange={(e) => { if (e.target.value.length <= MAX_CHARS) { setInput(e.target.value); setCharCount(e.target.value.length); setSuggestQuery(e.target.value); } }}
                   onKeyDown={handleKeyDown} rows={1}
                   className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-16 text-sm text-gray-700 placeholder:text-gray-400 focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] resize-none min-h-[48px] max-h-[120px]"
-                  placeholder="Ask about shipments, inventory, routes, or upload a CSV..."
-                  aria-label="Type your message"
+                  aria-label="Type your message" placeholder="Ask about shipments, inventory, routes, or upload a CSV..."
                 />
                 <span className={cn("absolute bottom-2 right-2 text-[10px]", charCount > MAX_CHARS * 0.8 ? "text-amber-500" : "text-gray-400")}>
                   {charCount}/{MAX_CHARS}

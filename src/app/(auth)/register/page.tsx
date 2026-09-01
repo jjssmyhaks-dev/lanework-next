@@ -106,7 +106,7 @@ export default function RegisterPage() {
               <form onSubmit={handleStep1} className="space-y-4" noValidate>
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-[#1a1a2e] mb-1.5">Name</label>
-                  <input id="name" type="text" value={name} onChange={e => setName(e.target.value)}
+                  <input id="name" type="text" aria-label="Full name" value={name} onChange={e => setName(e.target.value)}
                     className="w-full rounded-lg border border-[#d1d5db] px-4 py-3 text-[#1a1a2e] placeholder:text-[#9ca3af] focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] transition"
                     placeholder="Your name" />
                   {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
@@ -114,7 +114,7 @@ export default function RegisterPage() {
 
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-[#1a1a2e] mb-1.5">Email</label>
-                  <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  <input id="email" type="email" aria-label="Email address" value={email} onChange={e => setEmail(e.target.value)}
                     className="w-full rounded-lg border border-[#d1d5db] px-4 py-3 text-[#1a1a2e] placeholder:text-[#9ca3af] focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] transition"
                     placeholder="you@company.com" />
                   {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
@@ -123,7 +123,7 @@ export default function RegisterPage() {
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium text-[#1a1a2e] mb-1.5">Password</label>
                   <div className="relative">
-                    <input id="password" type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)}
+                    <input id="password" type={showPassword ? "text" : "password"} aria-label="Password" value={password} onChange={e => setPassword(e.target.value)}
                       className="w-full rounded-lg border border-[#d1d5db] px-4 py-3 pr-12 text-[#1a1a2e] placeholder:text-[#9ca3af] focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] transition"
                       placeholder="Min 3 characters" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#1a1a2e]">
@@ -156,7 +156,7 @@ export default function RegisterPage() {
               <form onSubmit={handleStep2} className="space-y-5" noValidate>
                 <div>
                   <label htmlFor="orgName" className="block text-sm font-medium text-[#1a1a2e] mb-1.5">Company name</label>
-                  <input id="orgName" type="text" value={orgName} onChange={e => setOrgName(e.target.value)}
+                  <input id="orgName" type="text" aria-label="Organization name" value={orgName} onChange={e => setOrgName(e.target.value)}
                     className="w-full rounded-lg border border-[#d1d5db] px-4 py-3 text-[#1a1a2e] placeholder:text-[#9ca3af] focus:border-[#1a1a2e] focus:outline-none focus:ring-1 focus:ring-[#1a1a2e] transition"
                     placeholder="e.g. Acme Logistics Pvt Ltd" />
                 </div>

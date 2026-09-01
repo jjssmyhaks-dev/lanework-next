@@ -133,13 +133,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
           <div className="flex items-center gap-1">
             <ThemeToggle />
-            <button className="lg:hidden p-1 rounded-md hover:bg-gray-100" onClick={() => setSidebarOpen(false)}>
+            <button className="lg:hidden p-1 rounded-md hover:bg-gray-100" onClick={() => setSidebarOpen(false)} aria-label="Close navigation menu">
               <X className="h-5 w-5 text-gray-600" />
             </button>
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto p-4 space-y-1" aria-label="Main navigation">
           {/* Primary — Chat */}
           {filterByRole(primaryNav).map((item) => (
             <Link
@@ -240,12 +240,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0" role="main">
         {/* Header */}
         <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-6 border-b border-gray-200 bg-white gap-4">
           <button
             className="lg:hidden p-1.5 rounded-md hover:bg-gray-100 flex-shrink-0"
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open navigation menu"
           >
             <Menu className="h-5 w-5 text-gray-600" />
           </button>
