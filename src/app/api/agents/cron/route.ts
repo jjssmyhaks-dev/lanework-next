@@ -15,10 +15,24 @@ import { logger } from "@/lib/logger";
 const log = logger.child({ module: "agent-cron" });
 
 export async function GET(request: NextRequest) {
+  // Authenticate: Vercel Cron sends x-vercel-cron header, or use Bearer token
+  const vercelCron = request.headers.get("x-vercel-cron");
+  const authHeader = request.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET;
+
+  const isVercelCron = !!vercelCron;
+  const isBearerAuth = cronSecret && authHeader === `Bearer ${cronSecret}`;
+  const isDev = process.env.NODE_ENV === "development";
+
+  if (!isVercelCron && !isBearerAuth && !isDev) {
+    log.warn({ ip: request.headers.get("x-forwarded-for") }, "Unauthorized cron access attempt");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const job = searchParams.get("job");
 
-  log.info({ job }, "Cron triggered");
+  log.info({ job, isVercelCron, isBearerAuth }, "Cron triggered");
 
   try {
     if (job) {

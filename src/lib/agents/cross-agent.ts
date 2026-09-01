@@ -141,12 +141,46 @@ export async function getSharedContext(tenantId: string): Promise<SharedContext>
   return context;
 }
 
+// ── Recursion Guard ──
+// Track propagation chains to prevent infinite loops
+const MAX_PROPAGATION_DEPTH = 3;
+const propagationChains = new Map<string, number>(); // eventId → depth
+const CLEANUP_INTERVAL = 60_000;
+let lastCleanup = Date.now();
+
+function getPropagationDepth(eventId: string): number {
+  return propagationChains.get(eventId) || 0;
+}
+
+function setPropagationDepth(eventId: string, depth: number): void {
+  propagationChains.set(eventId, depth);
+  // Cleanup old entries periodically
+  if (Date.now() - lastCleanup > CLEANUP_INTERVAL) {
+    for (const [key] of propagationChains) {
+      if (propagationChains.size > 1000) propagationChains.delete(key);
+    }
+    lastCleanup = Date.now();
+  }
+}
+
 // ── Register propagation handlers ──
 
 export function registerCrossAgentPropagation(): void {
   for (const rule of PROPAGATION_RULES) {
     onEvent(rule.sourceEvent, async (event) => {
       try {
+        // Check propagation depth to prevent infinite loops
+        const currentDepth = getPropagationDepth(event.id);
+        if (currentDepth >= MAX_PROPAGATION_DEPTH) {
+          log.warn({
+            eventId: event.id,
+            depth: currentDepth,
+            from: rule.sourceEvent,
+            to: rule.targetEvent,
+          }, "Max propagation depth reached — stopping chain");
+          return;
+        }
+
         const transformed = rule.transform(event.data);
 
         // Store in shared context
@@ -165,18 +199,23 @@ export function registerCrossAgentPropagation(): void {
 
         // Emit propagated event (skip if same event type to avoid loops)
         if (rule.targetEvent !== rule.sourceEvent) {
-          await emitEvent(rule.targetEvent, {
+          const propagatedEventId = await emitEvent(rule.targetEvent, {
             ...transformed,
             _propagatedFrom: rule.sourceEvent,
             _propagationReason: rule.description,
+            _propagationDepth: currentDepth + 1,
           }, {
             source: "system",
             tenantId: event.tenantId,
           });
 
+          // Track depth for the propagated event
+          setPropagationDepth(propagatedEventId, currentDepth + 1);
+
           log.info({
             from: rule.sourceEvent,
             to: rule.targetEvent,
+            depth: currentDepth + 1,
             tenantId: event.tenantId,
           }, "Cross-agent event propagated");
         }

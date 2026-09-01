@@ -86,7 +86,7 @@ export async function pollShipments(): Promise<{ checked: number; alerts: number
       }
 
       // Detect potential delay (status hasn't changed in > 48 hours and not delivered)
-      if (newStatus && newStatus !== oldStatus === false) {
+      if (newStatus && newStatus === oldStatus) {
         const hoursSinceUpdate = (Date.now() - new Date(shipment.updated_at).getTime()) / (1000 * 60 * 60);
         if (hoursSinceUpdate > 48 && newStatus !== "delivered") {
           await emitEvent("shipment.delayed", {

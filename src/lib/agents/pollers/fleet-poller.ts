@@ -140,5 +140,7 @@ async function createAlert(
       VALUES (gen_random_uuid(), ${tenantId || null}, ${agentType}, ${alertType}, ${severity},
               ${title}, ${message}, ${JSON.stringify(data)}::jsonb, NOW())
     `;
-  } catch {}
+  } catch (e: unknown) {
+    log.error({ err: e instanceof Error ? e.message : "unknown" }, "Failed to create alert");
+  }
 }

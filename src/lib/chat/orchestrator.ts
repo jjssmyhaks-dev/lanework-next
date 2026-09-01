@@ -1,13 +1,23 @@
 /**
- * Chat Orchestrator — the brain of the chat-first interface.
+ * Chat Orchestrator — Vercel AI SDK powered.
  *
- * Receives a user message, determines which MCP tools to call,
- * executes them in parallel where possible, and returns a structured
- * response with tool-call details and mode indicators.
+ * Features:
+ * - Multi-turn conversation context (message history from DB)
+ * - Streaming LLM output with tool calls
+ * - MCP tool execution with parallel capability
+ * - Knowledge base context injection
+ * - Cost tracking per conversation
  */
 
+import { generateText, streamText, tool } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { callMcpAction, listMcpCoverage } from "@/lib/mcp";
 import { getKBAgentContext } from "@/lib/knowledge";
+import { neon } from "@neondatabase/serverless";
+import { logger } from "@/lib/logger";
+
+const sql = neon(process.env.DATABASE_URL!);
+const log = logger.child({ module: "chat-orchestrator" });
 
 // ── Types ──
 
@@ -16,7 +26,7 @@ export interface ToolCallRecord {
   action: string;
   input: Record<string, any>;
   output: any;
-  mode: "live" | "simulated" | "db-fallback" | "error";
+  mode: "live" | "simulated" | "db-fallback" | "error" | "dry_run";
   durationMs: number;
   errorMessage?: string;
 }
@@ -28,425 +38,529 @@ export interface OrchestratorResult {
   requiresAuth: boolean;
 }
 
-// ── Intent Detection ──
-
-interface IntentMatch {
-  intent: string;
-  integration?: string;
-  action?: string;
-  params: Record<string, any>;
-  priority: number; // higher = checked first
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  toolCalls?: any;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
 }
 
-const INTENT_PATTERNS: Array<{
-  pattern: RegExp;
-  intent: string;
-  integration?: string;
-  action?: string;
-  extract?: (match: RegExpMatchArray, text: string) => Record<string, any>;
-  priority: number;
-}> = [
-  // ── Tracking ──
-  {
-    pattern: /track(?:\s+shipment)?\s+([\w-]+)/i,
-    intent: "track_shipment",
-    integration: "shiprocket",
-    action: "track_shipment",
-    extract: (m) => ({ awb: m[1].replace(/[#?!.,;:\s]/g, "") }),
-    priority: 10,
-  },
-  {
-    pattern: /where\s+(?:is|are)\s+(?:my\s+)?(?:shipment\s+)?([\w-]+)/i,
-    intent: "track_shipment",
-    integration: "shiprocket",
-    action: "track_shipment",
-    extract: (m) => ({ awb: m[1].replace(/[#?!.,;:\s]/g, "") }),
-    priority: 10,
-  },
-  {
-    pattern: /status\s+(?:of\s+)?(?:shipment\s+)?([\w-]+)/i,
-    intent: "track_shipment",
-    integration: "shiprocket",
-    action: "track_shipment",
-    extract: (m) => ({ awb: m[1].replace(/[#?!.,;:\s]/g, "") }),
-    priority: 9,
-  },
+// ── Message History ──
 
-  // ── Shipping Rates ──
-  {
-    pattern: /(?:shipping\s+)?rates?\s+(?:from|between)\s+(\d{6})\s+(?:to|and)\s+(\d{6})\s*(?:for\s+)?(\d+(?:\.\d+)?)\s*(?:kg|kgs?)?/i,
-    intent: "compare_rates",
-    integration: "shiprocket",
-    action: "compare_rates",
-    extract: (m) => ({ pickup_pincode: m[1], delivery_pincode: m[2], weight: parseFloat(m[3]) }),
-    priority: 8,
-  },
-
-  // ── Cancel Shipment ──
-  {
-    pattern: /cancel\s+(?:shipment\s+)?([\w-]+)/i,
-    intent: "cancel_shipment",
-    integration: "shiprocket",
-    action: "cancel_shipment",
-    extract: (m) => ({ awb: m[1] }),
-    priority: 9,
-  },
-
-  // ── Inventory ──
-  {
-    pattern: /(?:check|show|sync)\s+(?:my\s+)?(?:the\s+)?inventory/i,
-    intent: "sync_inventory",
-    integration: "tally_prime",
-    action: "sync_inventory",
-    extract: () => ({}),
-    priority: 7,
-  },
-  {
-    pattern: /low[\s-]?stock/i,
-    intent: "check_low_stock",
-    integration: "tally_prime",
-    action: "check_stock",
-    extract: () => ({}),
-    priority: 7,
-  },
-  {
-    pattern: /(?:check|what(?:'s| is))\s+(?:the\s+)?stock\s+(?:of|for|level)\s+(\S+)/i,
-    intent: "check_stock",
-    integration: "tally_prime",
-    action: "check_stock",
-    extract: (m) => ({ sku: m[1] }),
-    priority: 7,
-  },
-
-  // ── Route Optimization ──
-  {
-    pattern: /(?:optimize|plan|best)\s+(?:the\s+)?route/i,
-    intent: "optimize_route",
-    integration: "mapmyindia",
-    action: "optimize_route",
-    extract: () => ({}),
-    priority: 6,
-  },
-
-  // ── GST / E-Way Bill ──
-  {
-    pattern: /validate\s+(?:GSTIN|gstin)\s+([\dA-Z]{15})/i,
-    intent: "validate_gstin",
-    integration: "gstn_eway_bill",
-    action: "validate_gstin",
-    extract: (m) => ({ gstin: m[1].toUpperCase() }),
-    priority: 8,
-  },
-  {
-    pattern: /generate\s+(?:an?\s+)?e[\s-]?way\s+bill/i,
-    intent: "generate_ewb",
-    integration: "gstn_eway_bill",
-    action: "generate_ewb",
-    extract: () => ({}),
-    priority: 7,
-  },
-
-  // ── Weather ──
-  {
-    pattern: /(?:what(?:'s| is) the )?weather\s+(?:in|at|for)\s+(.+)/i,
-    intent: "weather",
-    integration: "weather",
-    action: "current_weather",
-    extract: (_m, text) => {
-      // Extract city name and geocode approximately
-      const city = text.match(/weather\s+(?:in|at|for)\s+(.+)/i)?.[1]?.trim() || "";
-      return { city, _needsGeocode: true };
-    },
-    priority: 6,
-  },
-  {
-    pattern: /weather\s+(?:along|for)\s+(?:the\s+)?route/i,
-    intent: "route_weather",
-    integration: "weather",
-    action: "route_weather",
-    extract: () => ({}),
-    priority: 6,
-  },
-
-  // ── E-commerce ──
-  {
-    pattern: /(?:sync|pull|fetch)\s+(?:orders?\s+)?(?:from\s+)?shopify/i,
-    intent: "sync_orders",
-    integration: "shopify",
-    action: "sync_orders",
-    extract: () => ({}),
-    priority: 7,
-  },
-  {
-    pattern: /(?:sync|pull|fetch)\s+(?:orders?\s+)?(?:from\s+)?woo(?:commerce)?/i,
-    intent: "sync_orders",
-    integration: "woocommerce",
-    action: "sync_orders",
-    extract: () => ({}),
-    priority: 7,
-  },
-
-  // ── Fleet ──
-  {
-    pattern: /(?:track|where(?:'s| is))\s+(?:the\s+)?(?:vehicle|truck|fleet)/i,
-    intent: "track_fleet",
-    integration: "loconav",
-    action: "track_all",
-    extract: () => ({}),
-    priority: 6,
-  },
-
-  // ── Reports ──
-  {
-    pattern: /(?:generate|create|show)\s+(?:a\s+)?(?:summary\s+)?report/i,
-    intent: "generate_report",
-    extract: () => ({}),
-    priority: 5,
-  },
-
-  // ── CSV Export ──
-  {
-    pattern: /export\s+(?:as\s+)?csv/i,
-    intent: "export_csv",
-    extract: () => ({}),
-    priority: 5,
-  },
-
-  // ── Compliance ──
-  {
-    pattern: /(?:check|verify)\s+(?:driver\s+)?license\s+(\S+)/i,
-    intent: "check_license",
-    integration: "compliance",
-    action: "check_license",
-    extract: (m) => ({ license_number: m[1] }),
-    priority: 6,
-  },
-  {
-    pattern: /(?:check|verify)\s+(?:vehicle\s+)?(?:RC|registration)\s+(\S+)/i,
-    intent: "check_registration",
-    integration: "compliance",
-    action: "check_registration",
-    extract: (m) => ({ registration_number: m[1] }),
-    priority: 6,
-  },
-];
-
-function detectIntents(text: string): IntentMatch[] {
-  const matches: IntentMatch[] = [];
-  for (const pat of INTENT_PATTERNS) {
-    const m = text.match(pat.pattern);
-    if (m) {
-      matches.push({
-        intent: pat.intent,
-        integration: pat.integration,
-        action: pat.action,
-        params: pat.extract ? pat.extract(m, text) : {},
-        priority: pat.priority,
-      });
-    }
+export async function getThreadMessages(
+  threadId: string,
+  limit: number = 20
+): Promise<ChatMessage[]> {
+  try {
+    const rows = await sql`
+      SELECT id, role, content, tool_calls, metadata, created_at
+      FROM chat_messages
+      WHERE thread_id = ${threadId}
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `;
+    return rows.reverse().map((r) => ({
+      id: r.id,
+      role: r.role as "user" | "assistant" | "system",
+      content: r.content,
+      toolCalls: r.tool_calls,
+      metadata: r.metadata,
+      createdAt: r.created_at,
+    }));
+  } catch (e: unknown) {
+    log.error({ err: e instanceof Error ? e.message : "unknown" }, "Failed to fetch thread messages");
+    return [];
   }
-  // Sort by priority descending, take top 3 max
-  return matches.sort((a, b) => b.priority - a.priority).slice(0, 3);
 }
 
-// ── Indian City Geocoding (approximate) ──
+// ── MCP Tool Definitions for Vercel AI ──
 
-const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
-  mumbai: { lat: 19.076, lng: 72.8777 },
-  delhi: { lat: 28.7041, lng: 77.1025 },
-  bangalore: { lat: 12.9716, lng: 77.5946 },
-  bengaluru: { lat: 12.9716, lng: 77.5946 },
-  chennai: { lat: 13.0827, lng: 80.2707 },
-  kolkata: { lat: 22.5726, lng: 88.3639 },
-  hyderabad: { lat: 17.385, lng: 78.4867 },
-  pune: { lat: 18.5204, lng: 73.8567 },
-  ahmedabad: { lat: 23.0225, lng: 72.5714 },
-  jaipur: { lat: 26.9124, lng: 75.7873 },
-  lucknow: { lat: 26.8467, lng: 80.9462 },
-  chandigarh: { lat: 30.7333, lng: 76.7794 },
-  indore: { lat: 22.7196, lng: 75.8577 },
-  bhopal: { lat: 23.2599, lng: 77.4126 },
-  kochi: { lat: 9.9312, lng: 76.2673 },
-  cochin: { lat: 9.9312, lng: 76.2673 },
-  nagpur: { lat: 21.1458, lng: 79.0882 },
-  surat: { lat: 21.1702, lng: 72.8311 },
-  vadodara: { lat: 22.3072, lng: 73.1812 },
-  mysore: { lat: 12.2958, lng: 76.6394 },
-  patna: { lat: 25.6093, lng: 85.1376 },
-  raipur: { lat: 21.2514, lng: 81.6296 },
-  guwahati: { lat: 26.1445, lng: 91.7362 },
-  amritsar: { lat: 31.634, lng: 74.8723 },
-  varanasi: { lat: 25.3176, lng: 82.9739 },
-  dehradun: { lat: 30.3165, lng: 78.0322 },
-  goa: { lat: 15.2993, lng: 74.124 },
+const MCP_TOOL_DEFINITIONS = {
+  trackShipment: tool({
+    description:
+      "Track a shipment by AWB number. Returns real-time status, location, and scan history.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        awb: {
+          type: "string",
+          description: "The AWB / tracking number",
+        },
+      },
+      required: ["awb"],
+    },
+    execute: async ({ awb }) => {
+      const result = await callMcpAction("shiprocket", "track_shipment", {
+        awb,
+      });
+      return result || { error: "Could not track shipment" };
+    },
+  }),
+
+  compareShippingRates: tool({
+    description:
+      "Compare shipping rates across carriers for a route. Returns rates from multiple carriers.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        pickupPincode: {
+          type: "string",
+          description: "6-digit pickup pincode",
+        },
+        deliveryPincode: {
+          type: "string",
+          description: "6-digit delivery pincode",
+        },
+        weight: {
+          type: "number",
+          description: "Package weight in kg",
+        },
+      },
+      required: ["pickupPincode", "deliveryPincode"],
+    },
+    execute: async ({ pickupPincode, deliveryPincode, weight }) => {
+      const result = await callMcpAction("shiprocket", "compare_rates", {
+        pickup_pincode: pickupPincode,
+        delivery_pincode: deliveryPincode,
+        weight: weight || 1,
+      });
+      return result || { error: "Could not fetch rates" };
+    },
+  }),
+
+  checkStock: tool({
+    description:
+      "Check inventory stock level for a specific SKU or product.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        sku: {
+          type: "string",
+          description: "The SKU or product code",
+        },
+      },
+      required: ["sku"],
+    },
+    execute: async ({ sku }) => {
+      const result = await callMcpAction("tally_prime", "check_stock", {
+        sku,
+      });
+      return result || { error: "Could not check stock" };
+    },
+  }),
+
+  syncInventory: tool({
+    description:
+      "Sync inventory from TallyPrime or accounting system.",
+    parameters: {
+      type: "object" as const,
+      properties: {},
+    },
+    execute: async () => {
+      const result = await callMcpAction("tally_prime", "sync_inventory", {});
+      return result || { error: "Could not sync inventory" };
+    },
+  }),
+
+  getWeather: tool({
+    description:
+      "Get current weather conditions for a location. Useful for route risk assessment.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        lat: { type: "number", description: "Latitude" },
+        lng: { type: "number", description: "Longitude" },
+        city: { type: "string", description: "City name (if lat/lng unknown)" },
+      },
+    },
+    execute: async ({ lat, lng, city }) => {
+      if (lat && lng) {
+        const result = await callMcpAction("weather", "current_weather", {
+          lat,
+          lng,
+        });
+        return result || { error: "Could not fetch weather" };
+      }
+      return { error: "Please provide coordinates or a valid city name" };
+    },
+  }),
+
+  getRouteWeather: tool({
+    description:
+      "Get weather conditions along a route (origin to destination). Shows risk assessment for each segment.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        origin: { type: "string", description: "Origin city" },
+        destination: { type: "string", description: "Destination city" },
+      },
+      required: ["origin", "destination"],
+    },
+    execute: async ({ origin, destination }) => {
+      const result = await callMcpAction("weather", "route_weather", {
+        origin,
+        destination,
+      });
+      return result || { error: "Could not fetch route weather" };
+    },
+  }),
+
+  optimizeRoute: tool({
+    description:
+      "Optimize a delivery route with multiple stops. Returns the best order of stops.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        origin: { type: "string", description: "Starting location" },
+        destination: { type: "string", description: "Final destination" },
+        stops: {
+          type: "array",
+          items: { type: "string" },
+          description: "Intermediate stops",
+        },
+      },
+      required: ["origin", "destination"],
+    },
+    execute: async ({ origin, destination, stops }) => {
+      const result = await callMcpAction("mapmyindia", "optimize_route", {
+        origin,
+        destination,
+        stops: stops || [],
+      });
+      return result || { error: "Could not optimize route" };
+    },
+  }),
+
+  validateGSTIN: tool({
+    description: "Validate an Indian GSTIN number and return business details.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        gstin: {
+          type: "string",
+          description: "15-character GSTIN number",
+        },
+      },
+      required: ["gstin"],
+    },
+    execute: async ({ gstin }) => {
+      const result = await callMcpAction("gstn_eway_bill", "validate_gstin", {
+        gstin,
+      });
+      return result || { error: "Could not validate GSTIN" };
+    },
+  }),
+
+  generateEwayBill: tool({
+    description: "Generate an e-way bill for a shipment.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        shipmentId: { type: "string" },
+        fromGstin: { type: "string" },
+        toGstin: { type: "string" },
+        invoiceValue: { type: "number" },
+        hsnCode: { type: "string" },
+      },
+    },
+    execute: async (params) => {
+      const result = await callMcpAction(
+        "gstn_eway_bill",
+        "generate_ewb",
+        params
+      );
+      return result || { error: "Could not generate e-way bill" };
+    },
+  }),
+
+  trackFleet: tool({
+    description:
+      "Get fleet status — all vehicles, their locations, and alerts.",
+    parameters: {
+      type: "object" as const,
+      properties: {},
+    },
+    execute: async () => {
+      const result = await callMcpAction("loconav", "track_all", {});
+      return result || { error: "Could not fetch fleet status" };
+    },
+  }),
+
+  checkDriverLicense: tool({
+    description: "Verify a driver's license and check validity.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        licenseNumber: { type: "string", description: "License number" },
+      },
+      required: ["licenseNumber"],
+    },
+    execute: async ({ licenseNumber }) => {
+      const result = await callMcpAction("compliance", "check_license", {
+        license_number: licenseNumber,
+      });
+      return result || { error: "Could not verify license" };
+    },
+  }),
+
+  checkVehicleRegistration: tool({
+    description: "Verify a vehicle's RC (registration) and compliance status.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        registrationNumber: {
+          type: "string",
+          description: "Vehicle registration number",
+        },
+      },
+      required: ["registrationNumber"],
+    },
+    execute: async ({ registrationNumber }) => {
+      const result = await callMcpAction(
+        "compliance",
+        "check_registration",
+        { registration_number: registrationNumber }
+      );
+      return result || { error: "Could not verify registration" };
+    },
+  }),
+
+  syncOrders: tool({
+    description:
+      "Sync orders from Shopify, WooCommerce, or other e-commerce platforms.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        platform: {
+          type: "string",
+          enum: ["shopify", "woocommerce"],
+          description: "E-commerce platform",
+        },
+      },
+    },
+    execute: async ({ platform }) => {
+      const integration = platform === "woocommerce" ? "woocommerce" : "shopify";
+      const result = await callMcpAction(integration, "sync_orders", {});
+      return result || { error: "Could not sync orders" };
+    },
+  }),
+
+  syncGoogleSheets: tool({
+    description: "Sync data to/from Google Sheets.",
+    parameters: {
+      type: "object" as const,
+      properties: {
+        action: {
+          type: "string",
+          enum: ["read", "write"],
+        },
+        sheetName: { type: "string" },
+      },
+    },
+    execute: async ({ action, sheetName }) => {
+      const mcpAction = action === "write" ? "write_sheet" : "read_sheet";
+      const result = await callMcpAction("google_sheets", mcpAction, {
+        sheetName: sheetName || "Sheet1",
+      });
+      return result || { error: "Could not sync Google Sheets" };
+    },
+  }),
 };
 
-// ── Reply Generation ──
+// ── System Prompt ──
 
-function generateReply(intent: string, toolCalls: ToolCallRecord[]): string {
-  if (toolCalls.length === 0) {
-    return "I can help with that! Could you provide more details? For example, a tracking number, location, or specific item.";
-  }
+function buildSystemPrompt(kbContext?: string): string {
+  return `You are Lanework Copilot, an AI logistics assistant for Indian MSMEs.
 
-  const tc = toolCalls[0]; // primary tool call
-  const modeNote =
-    tc.mode === "live"
-      ? ""
-      : tc.mode === "db-fallback"
-        ? " _(using cached data — live API unavailable)_"
-        : tc.mode === "error"
-          ? " _(API error — showing fallback data)_"
-          : " _(demo mode — configure API keys for live data)_";
+You help with:
+- Package tracking (Shiprocket, FedEx, DHL)
+- Inventory management (TallyPrime, ERP)
+- Route optimization (MapmyIndia)
+- Fleet management (LocoNav, FleetX)
+- E-way bill generation (GSTN)
+- Compliance checking (license, RC, challans)
+- Weather-based route risk assessment
+- E-commerce order sync (Shopify, WooCommerce)
+- Google Sheets data sync
+- Warehouse operations
 
-  switch (intent) {
-    case "track_shipment": {
-      const d = tc.output;
-      if (!d || d.status === "unknown") {
-        return `I couldn't find shipment **${tc.input.awb || ""}**. ${modeNote}\n\nDouble-check the AWB number and try again.`;
-      }
-      const scans = d.scans?.length
-        ? `\n\n**Recent scans:**\n${d.scans.slice(0, 5).map((s: any) => `• ${s.status} — ${s.location || "unknown"} (${s.time || "N/A"})`).join("\n")}`
-        : "";
-      return `📦 **Shipment ${d.awb || tc.input.awb}**\n\n• **Status:** ${d.status}\n• **Location:** ${d.location || "N/A"}\n• **Last update:** ${d.lastUpdate || "N/A"}${scans}${modeNote}`;
-    }
-    case "compare_rates": {
-      const d = tc.output;
-      const rates = d?.rates;
-      if (!rates || rates.length === 0) {
-        return `No shipping rates found for this route. ${modeNote}`;
-      }
-      const rateList = rates
-        .slice(0, 5)
-        .map((r: any, i: number) => `${i + 1}. **${r.courier}** — ₹${r.rate} (${r.estimatedDays} days)${r.isRecommended ? " ⭐" : ""}`)
-        .join("\n");
-      return `📊 **Shipping Rates** (${tc.input.pickup_pincode} → ${tc.input.delivery_pincode}, ${tc.input.weight}kg)\n\n${rateList}${modeNote}`;
-    }
-    case "cancel_shipment": {
-      return `✅ Shipment **${tc.input.awb}** has been cancelled.${modeNote}`;
-    }
-    case "sync_inventory": {
-      const d = tc.output;
-      const items = d?.items || [];
-      if (items.length === 0) return `No inventory items found. ${modeNote}`;
-      const summary = items.slice(0, 10).map((i: any) => `• **${i.sku}** — ${i.name}: ${i.qty} units`).join("\n");
-      return `📦 **Inventory** (${d?.synced || items.length} items)\n\n${summary}${items.length > 10 ? `\n\n_...and ${items.length - 10} more items_` : ""}${modeNote}`;
-    }
-    case "check_stock": {
-      const d = tc.output;
-      if (!d || d.name === "Not found") return `SKU **${tc.input.sku}** not found in inventory. ${modeNote}`;
-      return `📊 **${d.sku}** — ${d.name}\n\n• **Qty:** ${d.qty}\n• **Reorder point:** ${d.reorderPoint}\n• **Needs reorder:** ${d.needsReorder ? "⚠️ Yes" : "No"}${modeNote}`;
-    }
-    case "validate_gstin": {
-      const d = tc.output;
-      if (!d) return `Could not validate GSTIN. ${modeNote}`;
-      return `🧾 **GSTIN ${d.gstin}**\n\n• **Valid:** ${d.valid ? "✅ Yes" : "❌ No"}\n• **Legal name:** ${d.legalName || "N/A"}\n• **State code:** ${d.stateCode || "N/A"}${modeNote}`;
-    }
-    case "weather": {
-      const d = tc.output;
-      if (!d) return `Could not fetch weather data. ${modeNote}`;
-      const alerts = d.alerts?.length ? `\n\n⚠️ **Alerts:**\n${d.alerts.map((a: string) => `• ${a}`).join("\n")}` : "";
-      return `🌤️ **Weather in ${d.location || tc.input.city || "India"}**\n\n• **Temp:** ${d.temp}°C (feels like ${d.feelsLike}°C)\n• **Conditions:** ${d.conditions}\n• **Wind:** ${d.windSpeed} km/h\n• **Humidity:** ${d.humidity}%\n• **Rain:** ${d.rainMm}mm${alerts}${modeNote}`;
-    }
-    case "route_weather": {
-      const d = tc.output;
-      if (!d) return `Could not fetch route weather. ${modeNote}`;
-      const stops = d.weatherAlongRoute?.map((w: any) => `• **${w.label}**: ${w.conditions}, ${w.temp}°C — Risk: ${w.risk} ${w.recommendation}`).join("\n") || "";
-      return `🗺️ **Route Weather** — Overall risk: **${d.overallRisk}**\n\n${stops}\n\n${d.recommendedAction}${modeNote}`;
-    }
-    case "sync_orders": {
-      const d = tc.output;
-      return `🛒 **${d?.platform || "E-commerce"} Order Sync**\n\n• Synced: ${d?.synced || 0} orders\n• Mode: ${d?.mode || "unknown"}${modeNote}`;
-    }
-    case "track_fleet": {
-      const d = tc.output;
-      if (!d) return `No fleet data available. ${modeNote}`;
-      return `🚛 **Fleet Status**\n\n• Vehicles: ${d.totalVehicles || 0}\n• Moving: ${d.moving || 0}\n• Idle: ${d.idle || 0}${modeNote}`;
-    }
-    case "generate_report": {
-      return `📋 **Report Generation**\n\nI can generate reports for:\n• Shipment status summary\n• Inventory stock levels\n• COD reconciliation\n• Fleet utilization\n\nPlease specify which report you'd like, or I can generate an overview.${modeNote}`;
-    }
-    case "export_csv": {
-      return `📥 **CSV Export**\n\nDownload your data:\n• [Shipments](/api/export/csv?entity=shipments)\n• [Inventory](/api/export/csv?entity=inventory)\n• [Orders](/api/export/csv?entity=orders)${modeNote}`;
-    }
-    case "check_license": {
-      const d = tc.output;
-      if (!d) return `Could not verify license. ${modeNote}`;
-      return `🪪 **Driver License ${tc.input.license_number}**\n\n• **Valid:** ${d.valid ? "✅ Yes" : "❌ No"}\n• **Name:** ${d.name || "N/A"}\n• **Expiry:** ${d.expiry || "N/A"}${modeNote}`;
-    }
-    case "check_registration": {
-      const d = tc.output;
-      if (!d) return `Could not verify registration. ${modeNote}`;
-      return `🚗 **Vehicle RC ${tc.input.registration_number}**\n\n• **Valid:** ${d.valid ? "✅ Yes" : "❌ No"}\n• **Owner:** ${d.owner || "N/A"}\n• **Fitness:** ${d.fitness || "N/A"}${modeNote}`;
-    }
-    case "generate_ewb": {
-      const d = tc.output;
-      if (!d) return `Could not generate e-way bill. ${modeNote}`;
-      return `🧾 **E-Way Bill Generated**\n\n• **EWB No:** ${d.ewbNo || "N/A"}\n• **Status:** ${d.status || "N/A"}\n• **Valid until:** ${d.validUntil || "N/A"}${modeNote}`;
-    }
-    default:
-      return tc.output
-        ? `Here's what I found:\n\n\`\`\`json\n${JSON.stringify(tc.output, null, 2).slice(0, 1000)}\n\`\`\`${modeNote}`
-        : `I processed your request. ${modeNote}`;
-  }
+Rules:
+- Always mention the data mode (live/simulated/db-fallback) when showing results
+- For Indian context: use ₹ for currency, IST for times, Indian city names
+- Be concise but helpful — logistics operators are busy
+- If unsure, ask for clarification rather than guessing
+- Never fabricate tracking numbers or shipment status
+${kbContext ? `\n\nKnowledge Base Context:\n${kbContext}` : ""}`;
 }
 
-// ── Main Orchestrator ──
+// ── Main Orchestrator with Vercel AI SDK ──
 
 export async function orchestrate(
   userMessage: string,
-  userId: string
+  userId: string,
+  threadId?: string
 ): Promise<OrchestratorResult> {
-  const intents = detectIntents(userMessage);
   const toolCalls: ToolCallRecord[] = [];
 
-  if (intents.length === 0) {
-    // No specific intent detected — use knowledge base for context
-    const kbContext = await getKBAgentContext(userMessage);
-    const toolHint = kbContext.toolRecommendations.length > 0
-      ? `\n\n💡 _I can help with: ${kbContext.toolRecommendations.map((r) => r.tool.replace(/_/g, " ")).join(", ")}_`
-      : "";
-    const entityHint = kbContext.mentionedEntities.length > 0
-      ? `\n\n_Related to: ${kbContext.mentionedEntities.join(", ")}_`
-      : "";
+  // 1. Get conversation history for multi-turn context
+  let messages: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+  if (threadId) {
+    const history = await getThreadMessages(threadId, 10);
+    messages = history.map((m) => ({
+      role: m.role === "system" ? "user" : m.role,
+      content: m.content,
+    }));
+  }
+
+  // Add current message
+  messages.push({ role: "user", content: userMessage });
+
+  // 2. Get knowledge base context
+  let kbContext = "";
+  try {
+    const kb = await getKBAgentContext(userMessage);
+    if (kb.toolRecommendations.length > 0) {
+      kbContext += `Tool recommendations: ${kb.toolRecommendations.map((r) => r.tool).join(", ")}\n`;
+    }
+    if (kb.mentionedEntities.length > 0) {
+      kbContext += `Related entities: ${kb.mentionedEntities.join(", ")}\n`;
+    }
+  } catch {
+    // Best effort
+  }
+
+  // 3. Generate with Vercel AI SDK
+  try {
+    const result = await generateText({
+      model: openai("gpt-4o-mini"),
+      system: buildSystemPrompt(kbContext),
+      messages,
+      tools: MCP_TOOL_DEFINITIONS,
+      maxSteps: 5, // Allow up to 5 sequential tool calls
+      temperature: 0.3,
+      maxTokens: 2000,
+    });
+
+    // Extract tool calls from the result
+    for (const step of result.steps) {
+      for (const toolCall of step.toolCalls) {
+        // Find the matching tool execution result
+        const toolResult = step.toolResults?.find(
+          (r: any) => r.toolCallId === toolCall.toolCallId
+        );
+        toolCalls.push({
+          integration: toolCall.toolName,
+          action: toolCall.toolName,
+          input: toolCall.args as Record<string, any>,
+          output: toolResult?.result || null,
+          mode: toolResult?.result?.mode || "simulated",
+          durationMs: 0,
+        });
+      }
+    }
+
     return {
-      reply: `I can help with that! Could you provide more details? For example, a tracking number, location, or specific item.${toolHint}${entityHint}`,
+      reply: result.text,
+      toolCalls,
+      intent: toolCalls.length > 0 ? toolCalls[0].action : "general",
+      requiresAuth: false,
+    };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    log.error({ err: msg }, "AI generation failed");
+
+    // Fallback to rule-based orchestrator
+    return orchestrateFallback(userMessage, toolCalls);
+  }
+}
+
+// ── Streaming Orchestrator ──
+
+export async function orchestrateStream(
+  userMessage: string,
+  userId: string,
+  threadId?: string
+) {
+  // Get conversation history
+  let messages: Array<{ role: "user" | "assistant"; content: string }> = [];
+
+  if (threadId) {
+    const history = await getThreadMessages(threadId, 10);
+    messages = history.map((m) => ({
+      role: m.role === "system" ? "user" : m.role,
+      content: m.content,
+    }));
+  }
+
+  messages.push({ role: "user", content: userMessage });
+
+  // Get KB context
+  let kbContext = "";
+  try {
+    const kb = await getKBAgentContext(userMessage);
+    if (kb.toolRecommendations.length > 0) {
+      kbContext += `Available tools: ${kb.toolRecommendations.map((r) => r.tool).join(", ")}\n`;
+    }
+  } catch {
+    // Best effort
+  }
+
+  const stream = streamText({
+    model: openai("gpt-4o-mini"),
+    system: buildSystemPrompt(kbContext),
+    messages,
+    tools: MCP_TOOL_DEFINITIONS,
+    maxSteps: 5,
+    temperature: 0.3,
+    maxTokens: 2000,
+  });
+
+  return stream;
+}
+
+// ── Fallback (rule-based, no AI) ──
+
+async function orchestrateFallback(
+  userMessage: string,
+  toolCalls: ToolCallRecord[]
+): Promise<OrchestratorResult> {
+  // Import the old intent detection
+  const { detectIntents } = await import("./intent-detect");
+
+  const intents = detectIntents(userMessage);
+
+  if (intents.length === 0) {
+    return {
+      reply:
+        "I can help with that! Could you provide more details? For example, a tracking number, location, or specific item.",
       toolCalls: [],
       intent: "general",
       requiresAuth: false,
     };
   }
 
-  // Execute tool calls (up to 3, in parallel where possible)
+  // Execute tool calls in parallel
   const primary = intents[0];
   const executionPromises = intents.map(async (intent) => {
-    if (!intent.integration || !intent.action) {
-      return null;
-    }
+    if (!intent.integration || !intent.action) return null;
 
     const start = Date.now();
     try {
-      const result = await callMcpAction(intent.integration, intent.action, intent.params);
-      const durationMs = Date.now() - start;
-
-      if (!result) {
-        return {
-          integration: intent.integration,
-          action: intent.action,
-          input: intent.params,
-          output: null,
-          mode: "error" as const,
-          durationMs,
-          errorMessage: "No handler for this integration/action",
-        };
-      }
-
+      const result = await callMcpAction(
+        intent.integration,
+        intent.action,
+        intent.params
+      );
       return {
         integration: intent.integration,
         action: intent.action,
         input: intent.params,
         output: result,
-        mode: (result.mode || "simulated") as ToolCallRecord["mode"],
-        durationMs,
+        mode: (result?.mode || "simulated") as ToolCallRecord["mode"],
+        durationMs: Date.now() - start,
       };
     } catch (e: any) {
       return {
@@ -466,7 +580,7 @@ export async function orchestrate(
     if (r) toolCalls.push(r);
   }
 
-  const reply = generateReply(primary.intent, toolCalls);
+  const reply = generateFallbackReply(primary.intent, toolCalls);
 
   return {
     reply,
@@ -474,4 +588,32 @@ export async function orchestrate(
     intent: primary.intent,
     requiresAuth: false,
   };
+}
+
+// ── Fallback Reply Generator ──
+
+function generateFallbackReply(
+  intent: string,
+  toolCalls: ToolCallRecord[]
+): string {
+  if (toolCalls.length === 0) {
+    return "I can help with that! Could you provide more details?";
+  }
+
+  const tc = toolCalls[0];
+  const modeNote =
+    tc.mode === "live"
+      ? ""
+      : tc.mode === "db-fallback"
+        ? " _(using cached data)_"
+        : tc.mode === "error"
+          ? " _(API error — showing fallback)_"
+          : " _(demo mode — configure API keys for live data)_";
+
+  const output = tc.output;
+  if (!output || output.error) {
+    return `I couldn't complete that request. ${output?.error || "Unknown error"} ${modeNote}`;
+  }
+
+  return `Here's what I found:\n\n\`\`\`json\n${JSON.stringify(output, null, 2).slice(0, 1500)}\n\`\`\`${modeNote}`;
 }

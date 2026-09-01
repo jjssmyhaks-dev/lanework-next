@@ -6,9 +6,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 import { getAllCircuitStatuses, resetCircuit } from "@/lib/agents/circuit-breaker";
 
-export const GET = withAuth(async () => {
+export const GET = withAuth(async (request) => {
+  const rl = rateLimit(request, { maxRequests: 30, windowMs: 60_000, group: "agent-circuit" });
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
   try {
     const statuses = getAllCircuitStatuses();
     return NextResponse.json({ circuits: statuses });
@@ -19,6 +24,10 @@ export const GET = withAuth(async () => {
 });
 
 export const POST = withAuth(async (request) => {
+  const rl = rateLimit(request, { maxRequests: 10, windowMs: 60_000, group: "agent-circuit-write" });
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
   try {
     const { integration } = await request.json();
     if (!integration) {

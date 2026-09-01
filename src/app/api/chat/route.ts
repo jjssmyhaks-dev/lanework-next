@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { withAuth } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
-import { orchestrate } from "@/lib/chat/orchestrator";
+import { orchestrate, orchestrateStream } from "@/lib/chat/orchestrator";
 import { requireChatLimit } from "@/lib/feature-gate";
 import { guardInput } from "@/lib/guardrails/input-guard";
 import { guardOutput } from "@/lib/guardrails/output-guard";
@@ -135,8 +135,33 @@ export const POST = withAuth(async (request, user) => {
       VALUES (${userMsgId}, ${activeThreadId}, 'user', ${message}, NOW())
     `;
 
-    // ── Run orchestrator ──
-    const result = await orchestrate(message, userId);
+    // ── Check if client wants streaming ──
+    const wantsStream = request.headers.get("accept") === "text/event-stream";
+
+    if (wantsStream) {
+      // Return streaming response
+      const stream = await orchestrateStream(message, userId, activeThreadId);
+
+      // Save user message and thread update in background
+      const userMsgId = crypto.randomUUID();
+      await sql`
+        INSERT INTO chat_messages (id, thread_id, role, content, created_at)
+        VALUES (${userMsgId}, ${activeThreadId}, 'user', ${message}, NOW())
+      `;
+      await sql`UPDATE chat_threads SET updated_at = NOW() WHERE id = ${activeThreadId}`;
+
+      // Return the stream directly — Vercel AI SDK handles SSE
+      return new Response(stream.textStream.pipeThrough(new TextEncoderStream()), {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
+    // ── Run orchestrator (non-streaming) ──
+    const result = await orchestrate(message, userId, activeThreadId);
 
     // ── Save assistant message ──
     const assistantMsgId = crypto.randomUUID();
@@ -191,7 +216,7 @@ export const POST = withAuth(async (request, user) => {
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("[Chat API]", msg);
+    console.error("[Chat API]", msg); // Keep for critical errors
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 });

@@ -244,6 +244,9 @@ const REGISTRY: Record<string, { create: () => any; actions: Record<string, Tool
 };
 
 import { checkCircuit, recordSuccess, recordFailure, type CircuitState } from "@/lib/agents/circuit-breaker";
+import { logger } from "@/lib/logger";
+
+const log = logger.child({ module: "mcp-adapter" });
 
 /**
  * Attempt to run an integration action through the MCP servers.
@@ -297,8 +300,7 @@ export async function callMcpAction(
   const isConfigured = process.env[envKey] || process.env[type.toUpperCase() + "_API_KEY"];
   if (!isConfigured && type !== "scanner" && type !== "dockscheduler") {
     // Still try to init — some MCP servers work without API keys (simulation mode)
-    // But log a warning
-    console.warn(`[MCP:${type}] No API key found for ${envKey} — will use simulation mode`);
+    log.warn({ integration: type, envKey }, "No API key found — will use simulation mode");
   }
 
   let mcp: any;
@@ -306,7 +308,7 @@ export async function callMcpAction(
     mcp = entry.create();
     await mcp.init();
   } catch (e: any) {
-    console.error(`[MCP:${type}] init failed:`, e);
+    log.error({ err: e.message, integration: type }, "MCP init failed");
     if (!options.skipCircuitBreaker) recordFailure(type);
     return {
       success: true,
@@ -321,7 +323,7 @@ export async function callMcpAction(
     if (!options.skipCircuitBreaker) recordSuccess(type);
     return { success: true, mode, ...result, source: `mcp:${type}` };
   } catch (e: any) {
-    console.error(`[MCP:${type}] action ${action} failed:`, e);
+    log.error({ err: e.message, integration: type, action }, "MCP action failed");
     if (!options.skipCircuitBreaker) recordFailure(type);
     return {
       success: true,
