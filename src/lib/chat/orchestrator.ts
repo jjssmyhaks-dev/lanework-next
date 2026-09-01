@@ -11,6 +11,7 @@
 
 import { generateText, streamText, tool } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { callMcpAction, listMcpCoverage } from "@/lib/mcp";
 import { getKBAgentContext } from "@/lib/knowledge";
 import { neon } from "@neondatabase/serverless";
@@ -432,10 +433,11 @@ export async function orchestrate(
     // Best effort
   }
 
-  // 3. Generate with Vercel AI SDK
+  // 3. Generate with Vercel AI SDK — try OpenAI first, fallback to Claude
+  const model = process.env.AI_MODEL === "claude" ? anthropic("claude-3-5-sonnet-20241022") : openai("gpt-4o-mini");
   try {
     const result = await generateText({
-      model: openai("gpt-4o-mini"),
+      model,
       system: buildSystemPrompt(kbContext),
       messages,
       tools: MCP_TOOL_DEFINITIONS,
@@ -508,8 +510,9 @@ export async function orchestrateStream(
     // Best effort
   }
 
+  const streamModel = process.env.AI_MODEL === "claude" ? anthropic("claude-3-5-sonnet-20241022") : openai("gpt-4o-mini");
   const stream = streamText({
-    model: openai("gpt-4o-mini"),
+    model: streamModel,
     system: buildSystemPrompt(kbContext),
     messages,
     tools: MCP_TOOL_DEFINITIONS,

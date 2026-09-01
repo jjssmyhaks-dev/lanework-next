@@ -13,7 +13,7 @@ import QuickActionsBar from "@/components/ui/chat/quick-actions-bar";
 import IntegrationPills from "@/components/ui/chat/integration-pills";
 import KnowledgeSuggestPopover from "@/components/ui/chat/knowledge-suggest-popover";
 import { useKnowledgeSuggest } from "@/components/ui/chat/use-knowledge-suggest";
-import { useChatStream } from "@/components/ui/chat/use-chat-stream";
+import { useAIChat } from "@/components/ui/chat/use-ai-chat";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { UpgradeBanner, UsageProgressBar } from "@/components/ui/upgrade-banner";
 import AgentActivityPanel from "@/components/ui/chat/agent-activity-panel";
@@ -374,28 +374,22 @@ export default function ChatPage() {
   const [streamingContent, setStreamingContent] = useState("");
   const [streamingToolCalls, setStreamingToolCalls] = useState<Array<{ integration: string; action: string; mode: string; durationMs: number }>>([]);
 
-  // ── SSE Stream Hook ──
-  const { send: sendStream, streaming: isStreaming } = useChatStream({
-    onToken: (token) => setStreamingContent((prev) => prev + token),
-    onToolCall: (tc) => setStreamingToolCalls((prev) => [...prev, tc]),
-    onDone: (result) => {
-      // Finalize the streamed message
-      const toolCall = result.toolCalls?.[0];
+  // ── Vercel AI SDK Streaming Hook ──
+  const aiChat = useAIChat({
+    onFinish: (message) => {
+      // Extract tool calls from the finished message
+      const toolInvocations = message.toolInvocations || [];
       let toolResult: ToolResult | null = null;
-      if (toolCall) {
-        const cardType = getResultCardType(toolCall.action, {});
-        toolResult = { type: cardType, data: { mode: toolCall.mode } };
+      if (toolInvocations.length > 0) {
+        const ti = toolInvocations[0];
+        const cardType = getResultCardType(ti.toolName, ti.result);
+        toolResult = { type: cardType, data: { ...ti.result, mode: ti.result?.mode || "simulated" } };
       }
-      addMessage({ id: genId(), role: "assistant", content: result.content, timestamp: new Date().toISOString(), toolResult });
-      setStreamingContent("");
-      setStreamingToolCalls([]);
-      if (result.threadId && result.threadId !== activeThreadId) setActiveThreadId(result.threadId);
+      addMessage({ id: message.id, role: "assistant", content: message.content, timestamp: new Date().toISOString(), toolResult });
       setLoading(false);
       fetchUsage();
     },
-    onError: (err) => {
-      setStreamingContent("");
-      setStreamingToolCalls([]);
+    onError: () => {
       setLoading(false);
     },
   });
@@ -416,8 +410,9 @@ export default function ChatPage() {
     setStreamingToolCalls([]);
 
     try {
-      // Use SSE streaming
-      await sendStream(msg, activeThreadId || undefined);
+      // Use Vercel AI SDK streaming
+      aiChat.sendMessage(msg);
+      setLoading(true);
     } catch {
       // Fallback to non-streaming if SSE fails
       try {
@@ -440,7 +435,7 @@ export default function ChatPage() {
       setLoading(false);
       fetchUsage();
     }
-  }, [input, loading, addMessage, activeThreadId, limitError, fetchUsage, sendStream, callChatOrchestrator]);
+  }, [input, loading, addMessage, activeThreadId, limitError, fetchUsage, aiChat, callChatOrchestrator]);
 
   // ── Connection Wizard ──
   const startConnection = (integration: IntegrationSetup) => {
@@ -620,28 +615,28 @@ export default function ChatPage() {
               />
             ))}
 
-            {/* Streaming Response */}
-            {loading && isStreaming && (
+            {/* Streaming Response from Vercel AI SDK */}
+            {loading && aiChat.isLoading && (
               <div className="flex gap-3">
                 <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#1a1a2e]">
                   <Bot className="h-4 w-4 text-white" />
                 </div>
                 <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-gray-100 max-w-[80%]">
-                  {/* Tool calls in progress */}
-                  {streamingToolCalls.length > 0 && (
+                  {/* Tool call indicators */}
+                  {aiChat.toolIndicators.length > 0 && (
                     <div className="mb-2 flex flex-wrap gap-1">
-                      {streamingToolCalls.map((tc, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
-                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                      {aiChat.toolIndicators.map((tc) => (
+                        <span key={tc.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                          <span className={cn("h-1.5 w-1.5 rounded-full", tc.status === "completed" ? "bg-emerald-500" : "bg-blue-500 animate-pulse")} />
                           {tc.integration}/{tc.action}
                           <span className="text-blue-400 text-[10px]">({tc.mode})</span>
                         </span>
                       ))}
                     </div>
                   )}
-                  {/* Streaming text */}
-                  {streamingContent ? (
-                    <MessageBubble role="assistant" content={streamingContent} timestamp="" isStreaming />
+                  {/* Streaming text from Vercel AI SDK */}
+                  {aiChat.messages.length > 0 ? (
+                    <MessageBubble role="assistant" content={aiChat.messages[aiChat.messages.length - 1]?.content || ""} timestamp="" isStreaming />
                   ) : (
                     <div className="flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
@@ -653,7 +648,7 @@ export default function ChatPage() {
               </div>
             )}
             {/* Non-streaming fallback loading */}
-            {loading && !isStreaming && (
+            {loading && !aiChat.isLoading && (
               <div className="flex gap-3">
                 <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#1a1a2e]">
                   <Bot className="h-4 w-4 text-white" />

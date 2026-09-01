@@ -11,7 +11,7 @@
 
 | Feature | Description |
 |---------|-------------|
-| **AI Chat (SSE Streaming)** | Natural language interface — "Where's shipment #4521?" triggers real MCP tool calls with token-by-token streaming |
+| **AI Chat (Vercel AI SDK)** | Natural language interface with streaming responses, tool call indicators, multi-turn context — powered by OpenAI GPT-4o-mini or Anthropic Claude |
 | **Knowledge Base (BM25 + JSON-LD)** | 50+ entries across MCPs, domain concepts, business rules — with typeahead search in chat and /knowledge |
 | **15 MCP Integrations** | Shiprocket, FedEx, TallyPrime, Shopify, MapmyIndia, Weather, ERP, and more — each with live/simulated/db-fallback modes |
 | **Autonomous Agents** | Background pollers monitor shipments (5min), inventory (30min), fleet (10min), compliance (daily) |
@@ -149,10 +149,13 @@ npx prisma db push
 | `JWT_SECRET` | Secret key for JWT tokens | `openssl rand -hex 32` |
 | `NEXTAUTH_SECRET` | Same as JWT_SECRET | `openssl rand -hex 32` |
 
-### AI (Cloudflare Workers AI)
+### AI (Vercel AI SDK)
 | Variable | Description | How to get |
 |----------|-------------|------------|
-| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID | [dash.cloudflare.com](https://dash.cloudflare.com) → Right sidebar |
+| `OPENAI_API_KEY` | OpenAI API key (default model: gpt-4o-mini) | [platform.openai.com](https://platform.openai.com) → API Keys |
+| `ANTHROPIC_API_KEY` | Anthropic API key (fallback: claude-3-5-sonnet) | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| `AI_MODEL` | Set to `claude` to use Anthropic as default | Optional — defaults to OpenAI |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (for additional AI tasks) | [dash.cloudflare.com](https://dash.cloudflare.com) → Right sidebar |
 | `CLOUDFLARE_API_TOKEN` | API token with Workers AI permission | Cloudflare → My Profile → API Tokens → Create |
 
 ### Integrations (bring your own API keys)
@@ -286,6 +289,28 @@ prisma/                      # Database schema + 2 migrations
 ---
 
 ## 🤖 AI Agent System
+
+### Vercel AI SDK Integration
+
+The chat uses [Vercel AI SDK](https://sdk.vercel.ai) for streaming LLM responses with tool calls:
+
+| Component | What it does |
+|-----------|-------------|
+| `useAIChat` hook | Client-side streaming hook with tool call indicators |
+| `/api/chat/ai` | Streaming endpoint — `streamText()` with 13 MCP tools |
+| `/api/chat` | Non-streaming fallback — `generateText()` with fallback to rule-based orchestrator |
+| OpenAI (default) | `gpt-4o-mini` — fast, cost-effective for Indian logistics queries |
+| Anthropic Claude | `claude-3-5-sonnet` — fallback when `AI_MODEL=claude` is set |
+
+**Setup:** Add `OPENAI_API_KEY` to `.env.local`. For Claude fallback, also add `ANTHROPIC_API_KEY`.
+
+**Features:**
+- Token-by-token streaming (50ms throttle for smooth UI)
+- 13 MCP tool definitions (track, rates, stock, weather, route, GSTIN, fleet, compliance, e-commerce, sheets)
+- Up to 5 sequential tool calls per message
+- Multi-turn context (last 10 messages from DB)
+- Knowledge base context injection
+- Cost tracking per conversation
 
 ### Background Pollers
 | Poller | Interval | What it does |
