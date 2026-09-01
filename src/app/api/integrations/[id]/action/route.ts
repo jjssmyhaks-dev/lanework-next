@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { rateLimit, integrationRateLimit } from "@/lib/rate-limit";
 import { callMcpAction } from "@/lib/mcp";
 import { withAuth } from "@/lib/auth";
+import { logger } from "@/lib/logger";
 
 // ── e-way bills table — created lazily so the feature works on fresh DBs ──
 async function ensureEwayBillsTable(sql: any) {
@@ -104,7 +105,7 @@ async function routeAction(type: string, action: string, config: any, sql: any, 
     const mcpResult = await callMcpAction(type, action, payload);
     if (mcpResult) return mcpResult;
   } catch (e: any) {
-    console.warn(`[action] MCP dispatch failed for ${type}/${action}, using inline:`, e);
+    logger.warn({ err: e, type, action }, "MCP dispatch failed, using inline");
   }
 
   switch (type) {

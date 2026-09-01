@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { neon } from "@neondatabase/serverless";
 import { runFullEval, runAgentEval } from "@/lib/eval-runner";
+import { logger } from "@/lib/logger";
 
 // POST — run evaluations
 export async function POST(request: NextRequest) {
@@ -27,12 +28,12 @@ export async function POST(request: NextRequest) {
         VALUES (${runId}, ${sessionUser.id}, ${agent || null}, ${summary.total}, ${summary.passed}, ${summary.failed}, ${summary.overallAvgScore}, ${summary.totalDurationMs}, ${JSON.stringify(summary)}::jsonb, NOW())
       `;
     } catch (dbErr) {
-      console.warn("Failed to persist eval run (table may not exist):", dbErr);
+      logger.warn({ err: dbErr }, "Failed to persist eval run");
     }
 
     return NextResponse.json(summary);
   } catch (error) {
-    console.error("Eval runner error:", error);
+    logger.error({ err: error }, "Eval runner error");
     return NextResponse.json(
       { error: "Eval execution failed" },
       { status: 500 }
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ runs });
   } catch (error) {
-    console.error("Eval history error:", error);
+    logger.error({ err: error }, "Eval history error");
     return NextResponse.json({ runs: [] });
   }
 }

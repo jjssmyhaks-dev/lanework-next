@@ -22,6 +22,7 @@ import { guardInput } from "@/lib/guardrails/input-guard";
 import { guardOutput } from "@/lib/guardrails/output-guard";
 import { checkBudget, recordCost } from "@/lib/guardrails/cost-guard";
 import { logInjectionAttempt, logRateLimitHit } from "@/lib/security/audit-events";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -277,7 +278,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error("[Chat Stream]", error.message);
+    logger.error({ err: error }, "Chat stream error");
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },

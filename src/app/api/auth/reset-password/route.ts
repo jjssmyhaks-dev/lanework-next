@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: "Password updated successfully" });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("[Reset Password]", msg);
+    logger.error({ msg }, "Reset password failed");
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

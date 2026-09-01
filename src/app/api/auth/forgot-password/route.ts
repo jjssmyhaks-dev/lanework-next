@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import crypto from "crypto";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     return successResponse;
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("[Forgot Password]", msg);
+    logger.error({ msg }, "Forgot password failed");
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

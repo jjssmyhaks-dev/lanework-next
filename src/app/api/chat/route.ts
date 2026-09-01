@@ -15,6 +15,7 @@ import { guardInput } from "@/lib/guardrails/input-guard";
 import { guardOutput } from "@/lib/guardrails/output-guard";
 import { checkBudget, recordCost } from "@/lib/guardrails/cost-guard";
 import { logInjectionAttempt, logRateLimitHit } from "@/lib/security/audit-events"
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -216,7 +217,7 @@ export const POST = withAuth(async (request, user) => {
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("[Chat API]", msg); // Keep for critical errors
+    logger.error({ msg }, "Chat API error"); // Keep for critical errors
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 });

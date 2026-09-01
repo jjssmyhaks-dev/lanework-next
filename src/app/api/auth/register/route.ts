@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import { createOrg } from "@/lib/org";
 import type { CompanySize } from "@/lib/org";
+import { logger } from "@/lib/logger";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
       try {
         org = await createOrg(orgName.trim(), id, (companySize as CompanySize) || "solo");
       } catch (e: any) {
-        console.error("Org creation error:", e);
+        logger.error({ err: e }, "Org creation error");
         // User created but org failed — not critical, they can create org later
       }
     }
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error: any) {
-    console.error("Registration error:", error);
+    logger.error({ err: error }, "Registration error");
     const detail = error?.message || String(error);
     return NextResponse.json(
       { success: false, error: `Registration failed: ${detail}` },

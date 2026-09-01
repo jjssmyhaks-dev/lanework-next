@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { neon } from "@neondatabase/serverless";
 import crypto from "crypto";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -34,7 +35,7 @@ export const POST = withAuth(async (request, user) => {
     return NextResponse.json({ success: true, plan });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("[Billing Verify]", msg);
+    logger.error({ msg }, "Billing verify failed");
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 });

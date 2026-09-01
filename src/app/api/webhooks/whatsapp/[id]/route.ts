@@ -28,7 +28,7 @@ export async function POST(
             if (msg) {
               // Route to customer-communication agent
               // In production, this would queue the message for the agent
-              console.log(`[WhatsApp] Message from ${msg.from}: ${msg.text?.body || "[non-text]"}`);
+              log.info({ from: msg.from, hasText: !!msg.text?.body }, "WhatsApp message received");
             }
           }
           if (change.field === "message_template_status_update") {
@@ -48,7 +48,7 @@ export async function POST(
 
     return NextResponse.json({ success: true });
   } catch (e: any) {
-    console.error(`[WhatsApp Webhook Error]`, e);
+    logger.error({ err: e }, "WhatsApp webhook error");
     return NextResponse.json({ success: false, error: e.message }, { status: 500 });
   }
 }

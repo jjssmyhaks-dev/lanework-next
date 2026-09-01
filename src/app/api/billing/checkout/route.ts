@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@/lib/auth";
 import { PLANS, type PlanId } from "@/lib/pricing";
+import { logger } from "@/lib/logger";
 
 export const POST = withAuth(async (request, user) => {
   try {
@@ -53,7 +54,7 @@ export const POST = withAuth(async (request, user) => {
 
     if (!orderRes.ok) {
       const err = await orderRes.text();
-      console.error("[Billing] Razorpay order creation failed:", err);
+      logger.error({ err }, "Razorpay order creation failed");
       return NextResponse.json({ error: "Failed to create payment order" }, { status: 500 });
     }
 
@@ -69,7 +70,7 @@ export const POST = withAuth(async (request, user) => {
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("[Billing Checkout]", msg);
+    logger.error({ msg }, "Billing checkout failed");
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 });

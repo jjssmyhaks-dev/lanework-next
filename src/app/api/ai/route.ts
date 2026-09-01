@@ -9,6 +9,7 @@ import {
   analyzeSentiment,
   generateTaskReasoning,
 } from "@/lib/ai";
+import { logger } from "@/lib/logger";
 
 // GET — return recent agent tasks for dashboard / agents pages
 // ?agent_type=shipment-tracking&limit=5
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(tasks);
   } catch (error) {
-    console.error("AI GET error:", error);
+    logger.error({ err: error }, "AI GET failed");
     // Graceful degradation: return empty array, not 500
     return NextResponse.json([], { status: 200 });
   }
@@ -108,7 +109,7 @@ export async function POST(request: NextRequest) {
         VALUES (${taskId}, ${tenantId}, ${agentId}, ${action}, 'completed', ${result}, ${JSON.stringify(data)}::jsonb, NOW(), NOW())
       `;
     } catch (dbErr) {
-      console.warn("Failed to save agent task to DB (non-fatal):", dbErr);
+      logger.warn({ err: dbErr }, "Failed to save agent task to DB (non-fatal)");
     }
 
     return NextResponse.json({
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
       result,
     });
   } catch (error) {
-    console.error("AI endpoint error:", error);
+    logger.error({ err: error }, "AI endpoint error");
     return NextResponse.json(
       { error: "AI service error. Please try again later." },
       { status: 500 },

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { withAuth } from "@/lib/auth";
 import { searchSchema, validateBody } from "@/lib/validations";
+import { logger } from "@/lib/logger";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -204,7 +205,7 @@ export const POST = withAuth(async (request) => {
         allResults.push(...r.value);
       } else {
         const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
-        console.error("Search sub-query failed:", msg);
+        logger.error({ msg }, "Search sub-query failed");
         errors.push(msg);
       }
     }
@@ -226,7 +227,7 @@ export const POST = withAuth(async (request) => {
     return NextResponse.json({ results: ranked, message: null, query });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
-    console.error("Search API error:", message);
+    logger.error({ message }, "Search API error");
     return NextResponse.json(
       { error: "Search failed", message: "Something went wrong. Please try again." },
       { status: 500 }
