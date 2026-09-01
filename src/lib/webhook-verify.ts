@@ -72,7 +72,7 @@ export function verifyWebhookSignature(
     }
 
     return crypto.timingSafeEqual(sigBuffer, computedBuffer);
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Fallback to string comparison if hex parsing fails
     log.warn({ headerName }, "Signature not hex, using string comparison");
     return crypto.timingSafeEqual(

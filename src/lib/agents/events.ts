@@ -112,7 +112,7 @@ export async function emitEvent(
       source: opts.source || "system",
       timestamp: now.toISOString(),
     });
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // SSE module not available (e.g., during build) — ignore
   }
 
@@ -137,7 +137,7 @@ export async function emitEvent(
           error: msg,
           attempts: 1,
         });
-      } catch {
+      } catch (_e) { /* non-critical, intentionally silent */
         // DLQ itself failed — log and move on
         log.error({ eventId: id }, "Failed to push to DLQ");
       }
@@ -147,7 +147,7 @@ export async function emitEvent(
   // Mark as processed
   try {
     await sql`UPDATE agent_events SET processed = true, processed_at = NOW() WHERE id = ${id}`;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 

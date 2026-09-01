@@ -167,7 +167,7 @@ async function runPoller(poller: PollerConfig): Promise<{
       ON CONFLICT (poller_name)
       DO UPDATE SET last_status = 'running', updated_at = NOW()
     `;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -198,7 +198,7 @@ async function runPoller(poller: PollerConfig): Promise<{
         ON CONFLICT (poller_name)
         DO UPDATE SET last_run_at = NOW(), last_status = 'error', error_message = ${msg}, updated_at = NOW()
       `;
-    } catch {
+    } catch (_e) { /* non-critical, intentionally silent */
       // Best effort
     }
   } finally {

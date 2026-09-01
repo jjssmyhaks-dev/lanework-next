@@ -115,7 +115,7 @@ export async function recordCost(
       VALUES (gen_random_uuid(), ${userId}, ${inputTokens}, ${outputTokens}, ${cost},
               ${metadata?.integration || null}, ${metadata?.action || null}, ${metadata?.threadId || null}, NOW())
     `;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort — don't fail the request
   }
 
@@ -141,7 +141,7 @@ export async function getUsageStats(userId: string): Promise<{
         AND created_at >= date_trunc('month', NOW())
     `;
     month = { costInr: row?.cost_inr || 0, calls: row?.calls || 0 };
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 

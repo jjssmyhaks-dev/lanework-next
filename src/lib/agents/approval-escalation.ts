@@ -189,7 +189,7 @@ export async function getEscalationStats(): Promise<{
       avgWaitTimeMinutes: Math.round(stats?.avg_wait_minutes || 0),
       oldestPendingMinutes: stats?.oldest_wait_minutes ? Math.round(stats.oldest_wait_minutes) : null,
     };
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return { pendingCount: 0, escalatedCount: 0, avgWaitTimeMinutes: 0, oldestPendingMinutes: null };
   }
 }

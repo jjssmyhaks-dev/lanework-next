@@ -16,6 +16,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import CommandPalette from "@/components/ui/command-palette";
 import MobileNav from "@/components/ui/mobile-nav";
 import { ToastProvider } from "@/components/ui/toast";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 // ── Organized Navigation with role requirements ──
 
@@ -119,7 +120,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/20 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 flex flex-col border-r border-gray-200 bg-white transition-transform lg:static lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-50 w-64 flex flex-col border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 transition-transform lg:static lg:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Logo */}
@@ -130,9 +131,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <span className="text-lg font-semibold tracking-tight text-black">Lanework</span>
           </Link>
-          <button className="lg:hidden p-1 rounded-md hover:bg-gray-100" onClick={() => setSidebarOpen(false)}>
-            <X className="h-5 w-5 text-gray-600" />
-          </button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <button className="lg:hidden p-1 rounded-md hover:bg-gray-100" onClick={() => setSidebarOpen(false)}>
+              <X className="h-5 w-5 text-gray-600" />
+            </button>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">

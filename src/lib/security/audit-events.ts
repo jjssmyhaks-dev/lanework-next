@@ -58,7 +58,7 @@ export async function logSecurityEvent(params: {
       VALUES (gen_random_uuid(), ${eventType}, ${severity}, ${userId || null}, ${ip || null},
               ${userAgent || null}, ${JSON.stringify(details || {})}::jsonb, ${blocked || false}, NOW())
     `;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Don't fail on audit log errors
   }
 
@@ -72,7 +72,7 @@ export async function logSecurityEvent(params: {
                 ${`A critical security event occurred: ${eventType}. ${details ? JSON.stringify(details) : ""}`},
                 ${JSON.stringify({ eventType, userId, ip, ...details })}::jsonb, NOW())
       `;
-    } catch {
+    } catch (_e) { /* non-critical, intentionally silent */
       // Best effort
     }
   }

@@ -75,7 +75,7 @@ export async function runTuningCycle(): Promise<TuningResult> {
             ON CONFLICT DO NOTHING
           `;
           result.applied++;
-        } catch {
+        } catch (_e) { /* non-critical, intentionally silent */
           // Best effort
         }
       }
@@ -118,7 +118,7 @@ export async function runTuningCycle(): Promise<TuningResult> {
       VALUES (gen_random_uuid(), NULL, 'auto-tuner', ${result.applied}, ${result.applied}, ${result.errors.length},
               0, 0, ${JSON.stringify(result)}::jsonb, NOW())
     `;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -144,7 +144,7 @@ export async function getTuningHistory(limit: number = 10): Promise<TuningResult
       LIMIT ${limit}
     `;
     return rows.map((r) => r.results as TuningResult);
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return [];
   }
 }

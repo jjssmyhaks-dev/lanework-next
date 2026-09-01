@@ -68,7 +68,7 @@ export async function getAdaptiveRisk(
         note = `Below average accuracy (${Math.round(accuracy * 100)}%) — risk increased by 1`;
       }
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -99,7 +99,7 @@ export async function getAdaptiveRisk(
         note += ` | Low approval rate (${Math.round(approvalRate * 100)}%)`;
       }
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 

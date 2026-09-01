@@ -102,7 +102,7 @@ export async function getCalibratedConfidence(
       sampleSize = 0;
       recommendation = rawConfidence >= 0.9 ? "auto_execute" : "review";
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Default to conservative
     recommendation = rawConfidence >= 0.9 ? "auto_execute" : "review";
   }
@@ -179,7 +179,7 @@ export async function getCalibrationStats(): Promise<ConfidenceStats> {
       lowConfidenceCount: row?.low_confidence || 0,
       highConfidenceCount: row?.high_confidence || 0,
     };
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return { totalPredictions: 0, avgConfidence: 0, calibrationError: 0, lowConfidenceCount: 0, highConfidenceCount: 0 };
   }
 }
@@ -215,7 +215,7 @@ export async function getActionCalibration(): Promise<Array<{
       actualAccuracy: r.actual_accuracy ? Math.round(r.actual_accuracy * 100) / 100 : null,
       calibrationError: r.error ? Math.round(r.error * 100) / 100 : null,
     }));
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return [];
   }
 }

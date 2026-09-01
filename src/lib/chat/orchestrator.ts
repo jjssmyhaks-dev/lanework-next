@@ -430,7 +430,7 @@ export async function orchestrate(
     if (kb.mentionedEntities.length > 0) {
       kbContext += `Related entities: ${kb.mentionedEntities.join(", ")}\n`;
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -507,7 +507,7 @@ export async function orchestrateStream(
     if (kb.toolRecommendations.length > 0) {
       kbContext += `Available tools: ${kb.toolRecommendations.map((r) => r.tool).join(", ")}\n`;
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 

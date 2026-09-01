@@ -21,6 +21,27 @@
   --radius: 0.5rem;
 }
 
+/* Dark mode variables */
+.dark {
+  --color-background: #0a0a1a;
+  --color-foreground: #e5e7eb;
+  --color-card: #111827;
+  --color-card-foreground: #e5e7eb;
+  --color-primary: #818cf8;
+  --color-primary-foreground: #0a0a1a;
+  --color-secondary: #1f2937;
+  --color-secondary-foreground: #e5e7eb;
+  --color-muted: #1f2937;
+  --color-muted-foreground: #9ca3af;
+  --color-accent: #1f2937;
+  --color-accent-foreground: #e5e7eb;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #fafafa;
+  --color-border: #374151;
+  --color-input: #374151;
+  --color-ring: #818cf8;
+}
+
 * {
   border-color: var(--color-border);
 }

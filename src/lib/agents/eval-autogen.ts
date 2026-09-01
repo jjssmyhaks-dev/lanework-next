@@ -220,7 +220,7 @@ export async function getGeneratedEvalCases(limit: number = 50): Promise<Generat
       generatedAt: r.generated_at,
       confidence: r.confidence,
     }));
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return [];
   }
 }

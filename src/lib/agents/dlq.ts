@@ -199,7 +199,7 @@ export async function discardDeadLetter(id: string): Promise<boolean> {
     `;
     log.info({ id }, "Dead letter discarded");
     return true;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return false;
   }
 }
@@ -234,7 +234,7 @@ export async function getDLQStats(): Promise<DeadLetterStats> {
       oldestPending: oldest?.created_at || null,
       avgAttempts: Math.round((row?.avg_attempts || 0) * 10) / 10,
     };
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return { total: 0, pending: 0, retrying: 0, discarded: 0, recovered: 0, oldestPending: null, avgAttempts: 0 };
   }
 }
@@ -251,7 +251,7 @@ export async function cleanupDeadLetters(daysOld: number = 30): Promise<number> 
     const count = (result as any).count || 0;
     if (count > 0) log.info({ count, daysOld }, "Cleaned up old DLQ entries");
     return count;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return 0;
   }
 }

@@ -151,7 +151,7 @@ export async function analyzeFeedback(days: number = 30): Promise<LearningInsigh
         });
       }
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 

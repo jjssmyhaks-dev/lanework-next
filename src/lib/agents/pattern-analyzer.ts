@@ -63,7 +63,7 @@ export async function extractPatterns(days: number = 30): Promise<ExtractedPatte
         });
       }
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -93,7 +93,7 @@ export async function extractPatterns(days: number = 30): Promise<ExtractedPatte
         evidence: { daily: dailyActivity.map((d) => ({ day: dayNames[d.dow], count: d.count })) },
       });
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -119,7 +119,7 @@ export async function extractPatterns(days: number = 30): Promise<ExtractedPatte
         evidence: { avgDecisionSeconds: avgSeconds, totalDecisions: velocityStats.total_decisions },
       });
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -150,7 +150,7 @@ export async function extractPatterns(days: number = 30): Promise<ExtractedPatte
         evidence: { riskBucket: row.risk_bucket, accuracy, correct: row.correct, total: row.total },
       });
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 

@@ -289,7 +289,7 @@ export async function getAllFlags(): Promise<FeatureFlag[]> {
     }));
     cacheTimestamp = Date.now();
     return cachedFlags!;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Fallback to builtin flags if DB fails
     return BUILTIN_FLAGS.map((f, i) => ({
       ...f,

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { IntegrationSetup } from "@/lib/integration-setup";
+import { sanitizeHTML } from "@/lib/sanitize";
 
 export default function ConnectPageClient({
   integration,
@@ -96,13 +97,15 @@ export default function ConnectPageClient({
                 <div
                   className="mt-1 text-sm text-gray-600 prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{
-                    __html: step.instruction
-                      .replace(/\n/g, "<br>")
-                      .replace(
-                        /\[(.+?)\]\((https?:\/\/.+?)\)/g,
-                        '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">$1</a>'
-                      )
-                      .replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 py-0.5 rounded text-xs font-mono text-gray-800">$1</code>'),
+                    __html: sanitizeHTML(
+                      step.instruction
+                        .replace(/\n/g, "<br>")
+                        .replace(
+                          /\[(.+?)\]\((https?:\/\/.+?)\)/g,
+                          '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">$1</a>'
+                        )
+                        .replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 py-0.5 rounded text-xs font-mono text-gray-800">$1</code>')
+                    ),
                   }}
                 />
                 {step.envVar && (

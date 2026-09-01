@@ -402,7 +402,7 @@ export async function getTodayChatCount(userId: string): Promise<number> {
         AND created_at >= date_trunc('day', NOW())
     `;
     return Number(row?.count) || 0;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return 0;
   }
 }
@@ -415,7 +415,7 @@ export async function getThisMonthShipmentCount(userId: string): Promise<number>
       WHERE created_at >= date_trunc('month', NOW())
     `;
     return Number(row?.count) || 0;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return 0;
   }
 }
@@ -427,7 +427,7 @@ export async function getUserPlan(userId: string): Promise<PlanId> {
     const plan = (row?.plan as string) || "free";
     if (plan in PLANS) return plan as PlanId;
     return "free";
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return "free";
   }
 }

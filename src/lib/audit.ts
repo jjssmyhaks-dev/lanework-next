@@ -58,7 +58,7 @@ export async function auditLog(params: AuditLogParams): Promise<void> {
         NOW()
       )
     `;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Audit logging should never fail the main request
     // Log to stderr at minimum for debugging
     console.error("[AuditLog] Failed to write audit record:", params.action, params.entityType, params.entityId);

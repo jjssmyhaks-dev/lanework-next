@@ -62,7 +62,7 @@ function resolveTemplate(template: unknown, context: Record<string, unknown>): u
         const fn = new Function(...Object.keys(context), `return ${expr}`);
         const val = fn(...Object.values(context));
         return String(val ?? "");
-      } catch {
+      } catch (_e) { /* non-critical, intentionally silent */
         return `\${${expr}}`;
       }
     });
@@ -225,7 +225,7 @@ export async function runWorkflow(
             `;
             break;
           }
-        } catch {
+        } catch (_e) { /* non-critical, intentionally silent */
           // Will fail below
         }
       }

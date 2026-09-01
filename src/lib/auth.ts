@@ -45,7 +45,7 @@ async function ensureBlacklistTable() {
     )`;
     await sql`CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at)`;
     blacklistTableReady = true;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Table may not exist yet — fall back to in-memory
     blacklistTableReady = false;
   }
@@ -122,7 +122,7 @@ export async function logout(userId: string): Promise<void> {
   try {
     const sql = neon(process.env.DATABASE_URL!);
     await sql`DELETE FROM sessions WHERE user_id = ${userId}`;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // sessions table may not exist — that's fine
   }
 }
@@ -202,7 +202,7 @@ export async function verifyToken(token: string): Promise<SessionUser | null> {
     // Check blacklist (now async for DB lookup)
     if (payload.jti && await isTokenBlacklisted(payload.jti as string)) return null;
     return { id: payload.id as string, name: payload.name as string | undefined, email: payload.email as string | undefined, image: payload.image as string | undefined };
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return null;
   }
 }
@@ -222,7 +222,7 @@ export async function verifyRefreshToken(token: string): Promise<{
     const jti = payload.jti as string;
     if (!sub || !family || !fingerprint) return null;
     return { sub, family, fingerprint, jti };
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return null;
   }
 }

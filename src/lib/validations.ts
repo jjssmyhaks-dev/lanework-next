@@ -206,7 +206,7 @@ export async function validateBody<T extends z.ZodType>(
       };
     }
     return { success: true, data: result.data };
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return {
       success: false,
       error: new Response(

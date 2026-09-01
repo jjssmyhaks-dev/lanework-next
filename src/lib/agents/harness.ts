@@ -115,7 +115,7 @@ export async function runHarnessCycle(): Promise<HarnessRun> {
       VALUES (${runId}, NULL, 'harness', ${evalResults.total}, ${evalResults.passed}, ${evalResults.failed},
               ${evalResults.overallAvgScore}, ${Date.now() - start}, ${JSON.stringify(harnessRun)}::jsonb, NOW())
     `;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -129,7 +129,7 @@ export async function runHarnessCycle(): Promise<HarnessRun> {
                 ${`Agent performance dropped. Score: ${baseline.score} → ${evalResults.overallAvgScore}. ${regressionDetails.join("; ")}`},
                 ${JSON.stringify({ runId, regressionDetails, evalSummary: evalResults })}::jsonb, NOW())
       `;
-    } catch {
+    } catch (_e) { /* non-critical, intentionally silent */
       // Best effort
     }
   }
@@ -150,7 +150,7 @@ export async function runHarnessCycle(): Promise<HarnessRun> {
     if (autoGen.generated > 0) {
       log.info({ generated: autoGen.generated, stored: autoGen.stored, sources: autoGen.sources }, "Auto-generated eval cases from production data");
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
 
@@ -181,7 +181,7 @@ async function getBaseline(): Promise<{ score: number | null; byAgent: Record<st
         byAgent: data.evalResults?.byAgent || {},
       };
     }
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     // Best effort
   }
   return { score: null, byAgent: {} };
@@ -231,7 +231,7 @@ export async function getHarnessStatus(): Promise<HarnessStatus> {
       totalRuns: rows.length,
       regressionsDetected,
     };
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return {
       lastRunAt: null,
       lastScore: null,

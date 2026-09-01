@@ -292,7 +292,7 @@ export async function getRejectionCount(
         AND created_at >= NOW() - (${days} || ' days')::interval
     `;
     return row?.count || 0;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return 0;
   }
 }
@@ -309,7 +309,7 @@ export async function cleanupMemory(daysOld: number = 90): Promise<number> {
     const count = (result as any).count || 0;
     if (count > 0) log.info({ count }, "Cleaned up expired memories");
     return count;
-  } catch {
+  } catch (_e) { /* non-critical, intentionally silent */
     return 0;
   }
 }
